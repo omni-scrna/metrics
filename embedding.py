@@ -1,26 +1,36 @@
 #!/usr/bin/env python3
 # Embedding quality metrics for omnibenchmark.
-# Currently computes silhouette score in PCA space against ground truth labels.
 #
 # Implementation notes
 # --------------------
 # - rhdf5 writes R matrices in column-major order; the stored HDF5 dimensions
 #   are [n_cols, n_rows] from h5py's perspective. Shape is validated against
 #   cell_ids at load time and transposed if needed.
-# - Silhouette requires >= 2 labels and >= 2 samples; returns NaN otherwise.
+# - All metrics require >= 2 labels and >= 2 samples; return NaN otherwise.
 
 import json
 import sys
 from pathlib import Path
+from typing import Callable
 
 import h5py
 import numpy as np
 import polars as pl
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import (
+    calinski_harabasz_score,
+    davies_bouldin_score,
+    silhouette_score,
+)
 
 script_dir = Path(__file__).parent
 sys.path.insert(0, str(script_dir / "src"))
 from cli import parse_embedding_args  # noqa: E402
+
+METRICS: dict[str, Callable] = {
+    "silhouette": silhouette_score,
+    "davies_bouldin": davies_bouldin_score,
+    "calinski_harabasz": calinski_harabasz_score,
+}
 
 
 def load_pca(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -65,12 +75,13 @@ def main() -> None:
     n_dropped = len(cell_ids) - n_cells
     print(f"  aligned cells: {n_cells} ({n_dropped} dropped — no truth label)")
 
-    sil = (
-        float(silhouette_score(aligned_embedding, aligned_labels))
-        if n_cells >= 2 and n_labels >= 2
-        else float("nan")
-    )
-    print(f"  silhouette: {sil}")
+    valid = n_cells >= 2 and n_labels >= 2
+    scores = {
+        name: float(fn(aligned_embedding, aligned_labels)) if valid else float("nan")
+        for name, fn in METRICS.items()
+    }
+    for name, val in scores.items():
+        print(f"  {name}: {val:.4f}")
 
     out = args.output_dir / f"{args.name}_embedding_metrics.json"
     with out.open("w") as fh:
@@ -79,7 +90,7 @@ def main() -> None:
                 "n_cells": n_cells,
                 "n_labels": n_labels,
                 "n_dropped": n_dropped,
-                "silhouette": sil,
+                **scores,
             },
             fh,
             indent=2,
