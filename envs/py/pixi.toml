@@ -1,0 +1,12 @@
+[workspace]
+channels = ["conda-forge"]
+name = "metrics-py"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[dependencies]
+python = ">=3.12"
+scikit-learn = "*"
+h5py = "*"
+numpy = "*"
+polars = "*"

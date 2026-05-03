@@ -1,0 +1,10 @@
+name: default
+channels:
+- conda-forge
+- nodefaults
+dependencies:
+- python >=3.12
+- scikit-learn *
+- h5py *
+- numpy *
+- polars *
