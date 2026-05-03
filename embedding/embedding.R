@@ -9,7 +9,7 @@
 
 suppressPackageStartupMessages({
   library(rhdf5)
-  library(POem)
+  library(poem)
   library(jsonlite)
 })
 
