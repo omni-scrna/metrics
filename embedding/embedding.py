@@ -32,8 +32,6 @@ METRICS: dict[str, Callable] = {
     "calinski_harabasz": calinski_harabasz_score,
 }
 
-_SCHEMA = Path(__file__).parent.parent / "cli" / "embedding.json"
-
 
 def load_pca(path: Path) -> tuple[np.ndarray, np.ndarray]:
     with h5py.File(path, "r") as f:
@@ -47,7 +45,7 @@ def load_pca(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def main() -> None:
-    args = parse_args(_SCHEMA)
+    args = parse_args()
 
     embedding, cell_ids = load_pca(args.pca)
 

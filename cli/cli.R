@@ -14,7 +14,8 @@ suppressPackageStartupMessages({
   switch(t, path = "character", string = "character", t)
 }
 
-parse_args_from_schema <- function(schema_path) {
+parse_args <- function() {
+  schema_path <- file.path(getSrcDirectory(parse_args), "embedding.json")
   schema <- fromJSON(schema_path)
   parser <- ArgumentParser()
 
