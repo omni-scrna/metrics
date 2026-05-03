@@ -2,3 +2,4 @@
 
 entrypoints:
   embedding-py: embedding/embedding.py
+  embedding-r: embedding/embedding.R

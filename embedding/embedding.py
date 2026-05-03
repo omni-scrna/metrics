@@ -62,7 +62,7 @@ def main() -> None:
     n_labels = merged["truths"].n_unique()
     n_dropped = len(cell_ids) - n_cells
 
-    if n_cells >= 2 and n_labels >= 2:
+    if n_labels >= 2:
         scores = {
             name: float(fn(aligned_embedding, aligned_labels))
             for name, fn in METRICS.items()
