@@ -1,0 +1,10 @@
+cff-version: 1.2.0
+message: "If you use this benchmark module, please consider citing it using the information from 'preferred-citation'."
+title: "metrics"
+authors:
+  - family-names: Choudhury
+    given-names: Atreya
+    orcid: "https://orcid.org/0009-0003-4975-0515"
+version: 0.1.0
+repository-code: "https://github.com/omni-scrna/metrics"
+license: MIT
