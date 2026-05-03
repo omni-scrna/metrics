@@ -52,7 +52,7 @@ main <- function() {
   idx <- match(pca$cell_ids, truth$cell_id)
   mask <- !is.na(idx)
   aligned_embedding <- pca$embedding[mask, , drop = FALSE]
-  aligned_labels <- truth$truths[idx[mask]]
+  aligned_labels <- as.factor(truth$truths[idx[mask]])
 
   n_cells <- sum(mask)
   n_labels <- length(unique(aligned_labels))
