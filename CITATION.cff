@@ -8,3 +8,21 @@ authors:
 version: 0.1.0
 repository-code: "https://github.com/omni-scrna/metrics"
 license: MIT
+references:
+  - type: article
+    title: "On metrics for subpopulation detection in single-cell and spatial omics data"
+    authors:
+      - family-names: Luo
+        given-names: Siyuan
+      - family-names: Germain
+        given-names: Pierre-Luc
+      - family-names: von Meyenn
+        given-names: Ferdinand
+      - family-names: Robinson
+        given-names: Mark
+    journal: "Nucleic Acids Research"
+    year: 2025
+    volume: 53
+    issue: 18
+    doi: 10.1093/nar/gkaf921
+    repository-code: "https://github.com/RoseYuan/poem"

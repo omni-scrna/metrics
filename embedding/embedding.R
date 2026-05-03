@@ -35,51 +35,47 @@ load_pca <- function(path) {
 }
 
 
-main <- function() {
-  args <- parse_args()
-  dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
+args <- parse_args()
+dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-  pca <- load_pca(args$pca)
+pca <- load_pca(args$pca)
 
-  truth <- read.table(
-    args$clusters_truth,
-    header = TRUE,
-    sep = "\t",
-    stringsAsFactors = FALSE
+truth <- read.table(
+  args$clusters_truth,
+  header = TRUE,
+  sep = "\t",
+  stringsAsFactors = FALSE
+)
+
+# Align embedding rows with truth labels by cell_id.
+idx <- match(pca$cell_ids, truth$cell_id)
+mask <- !is.na(idx)
+aligned_embedding <- pca$embedding[mask, , drop = FALSE]
+aligned_labels <- as.factor(truth$truths[idx[mask]])
+
+n_cells <- sum(mask)
+n_labels <- length(unique(aligned_labels))
+n_dropped <- sum(!mask)
+
+if (n_labels >= 2) {
+  result_df <- getEmbeddingMetrics(
+    aligned_embedding,
+    labels = aligned_labels,
+    metrics = METRICS,
+    level = "dataset"
   )
-
-  # Align embedding rows with truth labels by cell_id.
-  idx <- match(pca$cell_ids, truth$cell_id)
-  mask <- !is.na(idx)
-  aligned_embedding <- pca$embedding[mask, , drop = FALSE]
-  aligned_labels <- as.factor(truth$truths[idx[mask]])
-
-  n_cells <- sum(mask)
-  n_labels <- length(unique(aligned_labels))
-  n_dropped <- sum(!mask)
-
-  if (n_labels >= 2) {
-    result_df <- getEmbeddingMetrics(
-      aligned_embedding,
-      labels = aligned_labels,
-      metrics = METRICS,
-      level = "dataset"
-    )
-    scores <- as.list(result_df[1, ])
-    scores <- lapply(scores, as.numeric)
-  } else {
-    scores <- setNames(as.list(rep(NA_real_, length(METRICS))), METRICS)
-  }
-
-  result <- c(
-    list(n_cells = n_cells, n_labels = n_labels, n_dropped = n_dropped),
-    scores
-  )
-  out <- file.path(
-    args$output_dir,
-    sprintf("%s_embedding_metrics.json", args$name)
-  )
-  writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE), out)
+  scores <- as.list(result_df[1, ])
+  scores <- lapply(scores, as.numeric)
+} else {
+  scores <- setNames(as.list(rep(NA_real_, length(METRICS))), METRICS)
 }
 
-main()
+result <- c(
+  list(n_cells = n_cells, n_labels = n_labels, n_dropped = n_dropped),
+  scores
+)
+out <- file.path(
+  args$output_dir,
+  sprintf("%s_embedding_metrics.json", args$name)
+)
+writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE), out)
