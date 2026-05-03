@@ -13,12 +13,11 @@ suppressPackageStartupMessages({
   library(jsonlite)
 })
 
-script_dir <- (function() {
-  cargs <- commandArgs(trailingOnly = FALSE)
-  m <- grep("^--file=", cargs)
-  if (length(m) > 0) dirname(sub("^--file=", "", cargs[[m]])) else getwd()
-})()
-source(file.path(script_dir, "..", "cli", "cli.R"))
+cargs <- commandArgs(trailingOnly = FALSE)
+m <- grep("--file=", cargs)
+.run_dir <- dirname(gsub("--file=", "", cargs[[m]]))
+
+source(file.path(.run_dir, "..", "cli", "cli.R"))
 
 # Add or remove metrics here; must be valid for level = "dataset".
 METRICS <- c("meanSW", "cdbw", "dbcv")
