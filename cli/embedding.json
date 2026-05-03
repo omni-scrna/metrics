@@ -1,0 +1,23 @@
+[
+	{
+		"flag": "--output_dir",
+		"type": "path",
+		"help": "Output directory for results"
+	},
+	{
+		"flag": "--name",
+		"type": "string",
+		"help": "Module name/identifier"
+	},
+	{
+		"flag": "--pca",
+		"type": "path",
+		"help": "PCA HDF5 file (embedding matrix + cell_ids)"
+	},
+	{
+		"flag": "--rawdata.clusters_truth",
+		"dest": "clusters_truth",
+		"type": "path",
+		"help": "TSV of ground truth cluster labels (columns: cell_id, truths)"
+	}
+]

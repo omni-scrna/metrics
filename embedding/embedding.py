@@ -22,15 +22,17 @@ from sklearn.metrics import (
     silhouette_score,
 )
 
-script_dir = Path(__file__).parent
-sys.path.insert(0, str(script_dir / "src"))
-from cli import parse_embedding_args  # noqa: E402
+sys.path.insert(0, str(Path(__file__).parent.parent / "cli"))
+from cli import parse_args  # noqa: E402
 
+# Add or remove metrics here; all must have signature fn(X, labels) -> float.
 METRICS: dict[str, Callable] = {
     "silhouette": silhouette_score,
     "davies_bouldin": davies_bouldin_score,
     "calinski_harabasz": calinski_harabasz_score,
 }
+
+_SCHEMA = Path(__file__).parent.parent / "cli" / "embedding.json"
 
 
 def load_pca(path: Path) -> tuple[np.ndarray, np.ndarray]:
@@ -45,16 +47,12 @@ def load_pca(path: Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def main() -> None:
-    args = parse_embedding_args()
+    args = parse_args(_SCHEMA)
 
     embedding, cell_ids = load_pca(args.pca)
 
-    # Drop cells with no ground truth label before alignment.
-    truth_df = pl.read_csv(args.clusters_truth, separator="\t").drop_nulls(
-        subset="truths"
-    )
-
     # Align embedding rows with truth labels by cell_id.
+    truth_df = pl.read_csv(args.clusters_truth, separator="\t")
     pca_df = pl.DataFrame({"cell_id": cell_ids, "idx": range(len(cell_ids))})
     merged = pca_df.join(
         truth_df.select(["cell_id", "truths"]), on="cell_id", how="inner"

@@ -1,4 +1,4 @@
 # OmniBenchmark Module Configuration
 
 entrypoints:
-  embedding: embedding.py
+  embedding-py: embedding/embedding.py
