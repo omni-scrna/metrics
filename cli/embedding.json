@@ -10,9 +10,9 @@
 		"help": "Module name/identifier"
 	},
 	{
-		"flag": "--pca",
+		"flag": "--pcas",
 		"type": "path",
-		"help": "PCA HDF5 file (embedding matrix + cell_ids)"
+		"help": "PCA HDF5 matrix file (embedding matrix w/ cell_ids as rownames)"
 	},
 	{
 		"flag": "--rawdata.clusters_truth",
