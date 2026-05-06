@@ -39,7 +39,8 @@ METRICS <- c("meanSW", "cdbw", "dbcv")
 args <- parse_args()
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-pca <- TENxMatrix(args$pcas, group="matrix")
+#pca <- TENxMatrix(args$pcas, group="matrix")
+pca <- read.table(args$pcas)
 
 truth <- read.table(
   args$clusters_truth,
