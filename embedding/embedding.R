@@ -49,9 +49,9 @@ truth <- read.table(
 )
 
 # Align embedding rows with truth labels by cell_id.
-idx <- match(pca$cell_ids, truth$cell_id)
+idx <- match(rownames(pca), truth$cell_id)
 mask <- !is.na(idx)
-aligned_embedding <- pca$embedding[mask, , drop = FALSE]
+aligned_embedding <- pca[mask, , drop = FALSE]
 aligned_labels <- as.factor(truth$truths[idx[mask]])
 
 n_cells <- sum(mask)
