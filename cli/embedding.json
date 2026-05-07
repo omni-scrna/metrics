@@ -10,7 +10,8 @@
 		"help": "Module name/identifier"
 	},
 	{
-		"flag": "--pcas",
+		"flag": "--pcas.tsv",
+		"dest": "pcas",
 		"type": "path",
 		"help": "PCA HDF5 matrix file (embedding matrix w/ cell_ids as rownames)"
 	},
