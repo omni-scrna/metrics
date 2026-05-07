@@ -8,6 +8,7 @@
 suppressPackageStartupMessages({
   library(poem)
   library(jsonlite)
+  library(data.table)
 })
 
 cargs <- commandArgs(trailingOnly = FALSE)
@@ -22,7 +23,12 @@ METRICS <- c("meanSW", "cdbw", "dbcv")
 args <- parse_args()
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-pca <- read.table(args$pcas)
+#pca <- read.table(args$pcas)
+#pca <- read.table(args$pcas, header=TRUE, row.names=1)
+pca <- fread(args$pcas, header = TRUE)
+pca <- as.data.frame(pca)
+rownames(pca) <- pca$cell_id
+pca$cell_id <- NULL
 
 truth <- read.table(
   args$clusters_truth,
