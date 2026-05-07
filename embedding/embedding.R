@@ -1,15 +1,11 @@
 #!/usr/bin/env Rscript
-# Embedding quality metrics (R/POem) for omnibenchmark.
+# Embedding quality metrics (R/poem) for omnibenchmark.
 #
 # Implementation notes
 # --------------------
-# - rhdf5 reads Python-written HDF5 matrices transposed relative to R convention;
-#   shape is validated against cell_ids and corrected if needed.
-# - All metrics require >= 2 labels; returns NA otherwise (handled by POem).
+# - All metrics require >= 2 labels; returns NA otherwise (handled by poem).
 
 suppressPackageStartupMessages({
-  #library(rhdf5)
-  library(HDF5Array)
   library(poem)
   library(jsonlite)
 })
@@ -23,23 +19,9 @@ source(file.path(.run_dir, "..", "cli", "cli.R"))
 # Add or remove metrics here; must be valid for level = "dataset".
 METRICS <- c("meanSW", "cdbw", "dbcv")
 
-
-#load_pca <- function(path) {
-#  raw <- h5read(path, "embedding")
-#  cell_ids <- as.character(h5read(path, "cell_ids"))
-#
-#  # R/Python HDF5 convention mismatch: ensure (n_cells, n_components).
-#  if (nrow(raw) != length(cell_ids)) {
-#    raw <- t(raw)
-#  }
-#  list(embedding = raw, cell_ids = cell_ids)
-#}
-
-
 args <- parse_args()
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-#pca <- TENxMatrix(args$pcas, group="matrix")
 pca <- read.table(args$pcas)
 
 truth <- read.table(
