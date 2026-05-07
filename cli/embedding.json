@@ -13,7 +13,7 @@
 		"flag": "--pcas.tsv",
 		"dest": "pcas",
 		"type": "path",
-		"help": "PCA HDF5 matrix file (embedding matrix w/ cell_ids as rownames)"
+		"help": "PCA TSV file (embedding matrix with cell_ids as rownames)"
 	},
 	{
 		"flag": "--rawdata.clusters_truth",

@@ -3,18 +3,13 @@
 #
 # Implementation notes
 # --------------------
-# - rhdf5 writes R matrices in column-major order; the stored HDF5 dimensions
-#   are [n_cols, n_rows] from h5py's perspective. Shape is validated against
-#   cell_ids at load time and transposed if needed.
-# - All metrics require >= 2 labels and >= 2 samples; return NaN otherwise.
+# - All metrics require >= 2 labels; return NaN otherwise.
 
 import json
 import sys
 from pathlib import Path
 from typing import Callable
 
-import h5py
-import numpy as np
 import polars as pl
 from sklearn.metrics import (
     calinski_harabasz_score,
@@ -33,39 +28,26 @@ METRICS: dict[str, Callable] = {
 }
 
 
-def load_pca(path: Path) -> tuple[np.ndarray, np.ndarray]:
-    with h5py.File(path, "r") as f:
-        raw = f["embedding"][:]
-        cell_ids = f["cell_ids"][:].astype(str)
-
-    # R/Python HDF5 convention mismatch: transpose to (n_cells, n_components).
-    if raw.shape[0] != len(cell_ids):
-        raw = raw.T
-    return raw, cell_ids
-
-
 def main() -> None:
     args = parse_args()
 
-    embedding, cell_ids = load_pca(args.pca)
+    pca_df = pl.read_csv(args.pcas, separator="\t")
+    truth_df = pl.read_csv(args.clusters_truth, separator="\t")
 
     # Align embedding rows with truth labels by cell_id.
-    truth_df = pl.read_csv(args.clusters_truth, separator="\t")
-    pca_df = pl.DataFrame({"cell_id": cell_ids, "idx": range(len(cell_ids))})
     merged = pca_df.join(
         truth_df.select(["cell_id", "truths"]), on="cell_id", how="inner"
     )
 
-    aligned_embedding = embedding[merged["idx"].to_numpy()]
+    embedding = merged.drop(["cell_id", "truths"]).to_numpy()
     aligned_labels = merged["truths"].cast(str).to_numpy()
     n_cells = len(merged)
     n_labels = merged["truths"].n_unique()
-    n_dropped = len(cell_ids) - n_cells
+    n_dropped = len(pca_df) - n_cells
 
     if n_labels >= 2:
         scores = {
-            name: float(fn(aligned_embedding, aligned_labels))
-            for name, fn in METRICS.items()
+            name: float(fn(embedding, aligned_labels)) for name, fn in METRICS.items()
         }
     else:
         scores = {name: float("nan") for name in METRICS}
