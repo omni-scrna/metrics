@@ -18,29 +18,28 @@ m <- grep("--file=", cargs)
 source(file.path(.run_dir, "..", "cli", "cli.R"))
 
 # Add or remove metrics here; must be valid for level = "dataset".
-METRICS <- c("meanSW", "cdbw", "dbcv")
+METRICS <- c(
+  "meanSW",
+  "meanClassSW",
+  "pnSW",
+  "minClassSW",
+  "cdbw",
+  "cohesion",
+  "compactness",
+  "sep",
+  "dbcv"
+)
 
 args <- parse_args()
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-#pca <- read.table(args$pcas)
-#pca <- read.table(args$pcas, header=TRUE, row.names=1)
 pca <- fread(args$pcas, header = TRUE)
-pca <- as.data.frame(pca)
-rownames(pca) <- pca$cell_id
-pca$cell_id <- NULL
-
-truth <- read.table(
-  args$clusters_truth,
-  header = TRUE,
-  sep = "\t",
-  stringsAsFactors = FALSE
-)
+truth <- fread(args$clusters_truth, header = TRUE)
 
 # Align embedding rows with truth labels by cell_id.
-idx <- match(rownames(pca), truth$cell_id)
+idx <- match(pca$cell_id, truth$cell_id)
 mask <- !is.na(idx)
-aligned_embedding <- pca[mask, , drop = FALSE]
+aligned_embedding <- pca[mask, !"cell_id"]
 aligned_labels <- as.factor(truth$truths[idx[mask]])
 
 n_cells <- sum(mask)
