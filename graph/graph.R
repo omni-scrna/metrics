@@ -35,10 +35,10 @@ METRICS <- c(
 )
 
 read_csr_h5 <- function(path) {
-  cell_ids <- h5read(path, "cell_ids")
-  data <- h5read(path, "data")
-  indices <- h5read(path, "indices") + 1L # 0-indexed → 1-indexed
-  indptr <- h5read(path, "indptr")
+  cell_ids <- as.character(h5read(path, "cell_ids"))
+  data <- as.numeric(h5read(path, "data"))
+  indices <- as.integer(h5read(path, "indices")) + 1L # 0-indexed → 1-indexed
+  indptr <- as.integer(h5read(path, "indptr"))
   n <- length(indptr) - 1L
   rows <- rep(seq_len(n), diff(indptr))
   mat <- sparseMatrix(i = rows, j = indices, x = data, dims = c(n, n))
