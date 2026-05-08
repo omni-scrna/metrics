@@ -9,11 +9,11 @@ import json
 from pathlib import Path
 
 _TYPE_MAP = {"path": Path, "integer": int}
-_SCHEMA = Path(__file__).parent / "embedding.json"
+_CLI_DIR = Path(__file__).parent
 
 
-def parse_args() -> argparse.Namespace:
-    with open(_SCHEMA) as f:
+def parse_args(schema: str = "embedding.json") -> argparse.Namespace:
+    with open(_CLI_DIR / schema) as f:
         schema = json.load(f)
 
     parser = argparse.ArgumentParser(description="OmniBenchmark embedding metrics")
