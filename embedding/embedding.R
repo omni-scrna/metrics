@@ -11,11 +11,6 @@ suppressPackageStartupMessages({
   library(data.table)
 })
 
-cargs <- commandArgs(trailingOnly = FALSE)
-m <- grep("--file=", cargs)
-.run_dir <- dirname(gsub("--file=", "", cargs[[m]]))
-
-source(file.path(.run_dir, "..", "cli", "cli.R"))
 
 # Add or remove metrics here; must be valid for level = "dataset".
 METRICS <- c(
@@ -30,11 +25,28 @@ METRICS <- c(
   "dbcv"
 )
 
-args <- parse_args()
+# arg parsing
+source("src/common/cli.R")
+p <- arg_parser("EMBED-M module")
+p <- add_base_args(p)                    # --output_dir, --name
+p <- add_stage_args(p, "EMBED-M")     # the stage I/O contract
+# your own method params — argparser directly (its add_argument requires `help`):
+p <- add_argument(p, "--number_selected", type = "integer", help = "number of PCs")
+args <- parse_args(p)                    # argparser's own parser
+
+# logging
+cat(sprintf("Full command: %s\n", paste(commandArgs(trailingOnly = FALSE), collapse = " ")))
+cat(sprintf("LOG: command line args\n----------------------------------\n"))
+for (i in 1:length(args)) {
+  cat(sprintf("  %s: %s\n", names(args)[i], args[[i]]))
+}
+cat(sprintf("----------------------------------\n"))
+
+
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-pca <- fread(args$pcas, header = TRUE)
-truth <- fread(args$clusters_truth, header = TRUE)
+pca <- fread(args$pcas_tsv, header = TRUE)
+truth <- fread(args$rawdata_clusters_truth, header = TRUE)
 
 # Align embedding rows with truth labels by cell_id.
 idx <- match(pca$cell_id, truth$cell_id)
