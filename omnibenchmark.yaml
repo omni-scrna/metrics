@@ -3,6 +3,8 @@
 entrypoints:
   embedding-py: embedding/embedding.py
   embedding-r: embedding/embedding.R
+  graph-r: graph/graph.R
+  cluster-r:   cluster/cluster.R
 
 # Pointed to shared CLI helper code
 templates:
