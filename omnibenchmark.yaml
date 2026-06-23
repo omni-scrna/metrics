@@ -9,6 +9,10 @@ templates:
   repo: https://github.com/omni-scrna/boilerplate
   ref: main            # the engine lives on boilerplate main
   lang: r
+templates:
+  repo: https://github.com/omni-scrna/boilerplate
+  ref: main            # the engine lives on boilerplate main
+  lang: python
 
 # Benchmark(s) that this module plugs into; `sync` vendors each one's schema/ dir into
 # src/common/schema/. Tracking the unmerged contract branch for now.

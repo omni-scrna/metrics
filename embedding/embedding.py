@@ -5,20 +5,30 @@
 # --------------------
 # - All metrics require >= 2 labels; return NaN otherwise.
 
-import json
+import argparse
 import sys
 from pathlib import Path
 from typing import Callable
-
 import polars as pl
+import json
+
+
+def parse_args():
+    # We own the parser; src/common/cli injects the shared contract (base args + the
+    # `EMBED-M` stage I/O from common/schema). This module's method params are
+    # hand-rolled below, so the whole CLI stays visible here.
+    p = argparse.ArgumentParser(description="EMBED-M module (scanpy-backed)")
+    cli.add_base_args(p)              # --output_dir, --name
+    cli.add_stage_args(p, "EMBED-M")  # --pcas_tsv, --rawdata_clusters_truth
+    #p.add_argument("--number_selected", type=int, required=True, help="Number of features to select")
+    return p.parse_args()
+
+
 from sklearn.metrics import (
     calinski_harabasz_score,
     davies_bouldin_score,
     silhouette_score,
 )
-
-sys.path.insert(0, str(Path(__file__).parent.parent / "cli"))
-from cli import parse_args  # noqa: E402
 
 # Add or remove metrics here; all must have signature fn(X, labels) -> float.
 METRICS: dict[str, Callable] = {
@@ -31,8 +41,14 @@ METRICS: dict[str, Callable] = {
 def main() -> None:
     args = parse_args()
 
-    pca_df = pl.read_csv(args.pcas, separator="\t")
-    truth_df = pl.read_csv(args.clusters_truth, separator="\t")
+    # logging
+    print(f"Output directory: {args.output_dir}") 
+    print(f"Module name: {args.name}")
+    print(f"pcas_tsv: {args.pcas_tsv}")
+    print(f"rawdata_clusters_truth: {args.rawdata_clusters_truth}")
+
+    pca_df = pl.read_csv(args.pcas_tsv, separator="\t")
+    truth_df = pl.read_csv(args.rawdata_clusters_truth, separator="\t")
 
     # Align embedding rows with truth labels by cell_id.
     merged = pca_df.join(
@@ -51,6 +67,9 @@ def main() -> None:
         }
     else:
         scores = {name: float("nan") for name in METRICS}
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True) 
 
     with open(args.output_dir / f"{args.name}_embedding_metrics.json", "w") as fh:
         json.dump(
