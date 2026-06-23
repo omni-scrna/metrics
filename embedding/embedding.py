@@ -12,6 +12,8 @@ from typing import Callable
 import polars as pl
 import json
 
+sys.path.insert(0, str(Path(__file__).parent / "src"))  # vendored `common` (src/common) + module-local writers
+from common import cli  # noqa: E402
 
 def parse_args():
     # We own the parser; src/common/cli injects the shared contract (base args + the
