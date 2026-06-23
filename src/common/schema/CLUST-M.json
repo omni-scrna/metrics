@@ -1,0 +1,10 @@
+{
+  "stage": "CLUST-M",
+  "version": "0.1.1",
+  "benchmark": "omni-scrna/split-stages-plan",
+  "args": [
+    { "flag": "--pcas_tsv", "type": "path", "help": "PCA embedding TSV (cell_ids as rownames)" },
+    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cluster labels (cell_id, truths)" }
+  ]
+}
+
