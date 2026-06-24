@@ -1,0 +1,10 @@
+{
+  "stage": "GRAPH-M",
+  "version": "0.1.1",
+  "benchmark": "omni-scrna/split-stages-plan",
+  "args": [
+    { "flag": "--neighbors_h5", "type": "path", "help": "Neighbors H5" },
+    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cluster labels (cell_id, truths)" }
+  ]
+}
+

@@ -16,12 +16,6 @@ suppressPackageStartupMessages({
   library(data.table)
 })
 
-cargs <- commandArgs(trailingOnly = FALSE)
-m <- grep("--file=", cargs)
-.run_dir <- dirname(gsub("--file=", "", cargs[[m]]))
-
-source(file.path(.run_dir, "..", "cli", "cli.R"))
-
 # Add or remove metrics here; must be valid for level = "dataset".
 METRICS <- c(
   "SI",
@@ -33,6 +27,23 @@ METRICS <- c(
   "adhesion",
   "cohesion"
 )
+
+# arg parsing
+source("src/common/cli.R")
+p <- arg_parser("GRAPH-M module")
+p <- add_base_args(p)                    # --output_dir, --name
+p <- add_stage_args(p, "GRAPH-M")     # the stage I/O contract
+# your own method params — argparser directly (its add_argument requires `help`):
+args <- parse_args(p)                    # argparser's own parser
+
+# logging
+cat(sprintf("Full command: %s\n", paste(commandArgs(trailingOnly = FALSE), collapse = " ")))
+cat(sprintf("LOG: command line args\n----------------------------------\n"))
+for (i in 1:length(args)) {
+  cat(sprintf("  %s: %s\n", names(args)[i], args[[i]]))
+}
+cat(sprintf("----------------------------------\n"))
+
 
 read_csr_h5 <- function(path) {
   cell_ids <- as.character(h5read(path, "cell_ids"))
@@ -46,7 +57,6 @@ read_csr_h5 <- function(path) {
   mat
 }
 
-args <- parse_args("graph.json")
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
 dist_mat <- read_csr_h5(args$distances)
