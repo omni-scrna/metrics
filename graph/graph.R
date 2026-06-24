@@ -59,7 +59,10 @@ read_csr_h5 <- function(path) {
 
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
+
+cat(sprintf("before read_csr_h5.\n"))
 dist_mat <- read_csr_h5(args$distances)
+cat(sprintf("after read_csr_h5.\n"))
 cell_ids <- rownames(dist_mat)
 
 truth <- fread(args$clusters_truth, header = TRUE)
