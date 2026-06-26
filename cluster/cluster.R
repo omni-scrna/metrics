@@ -42,8 +42,8 @@ cat(sprintf("----------------------------------\n"))
 
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-pred <- fread(args$clusters, header = TRUE)
-truth <- fread(args$clusters_truth, header = TRUE)
+pred <- fread(args$clusters_tsv, header = TRUE)
+truth <- fread(args$rawdata_clusters_truth, header = TRUE)
 
 merged <- merge(pred, truth, by = "cell_id", all = FALSE)
 
