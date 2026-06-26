@@ -22,7 +22,6 @@ def parse_args():
     p = argparse.ArgumentParser(description="EMBED-M module (scanpy-backed)")
     cli.add_base_args(p)              # --output_dir, --name
     cli.add_stage_args(p, "EMBED-M")  # --pcas_tsv, --rawdata_clusters_truth
-    #p.add_argument("--number_selected", type=int, required=True, help="Number of features to select")
     return p.parse_args()
 
 
