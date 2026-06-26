@@ -1,35 +1,39 @@
 #!/usr/bin/env Rscript
-# Embedding quality metrics (R/poem) for omnibenchmark.
+# Graph quality metrics (R/poem) for omnibenchmark.
 #
 # Implementation notes
 # --------------------
-# - All metrics require >= 2 labels; returns NA otherwise (handled by poem).
+# - Reads KNN distances as CSR from HDF5 (cell_ids, data, indices, indptr).
+# - Converts to igraph for POem's getGraphMetrics.
+# - All metrics require >= 2 labels; returns NA otherwise.
 
 suppressPackageStartupMessages({
   library(poem)
+  library(rhdf5)
+  library(Matrix)
+  library(HDF5Array)
+  library(igraph)
   library(jsonlite)
   library(data.table)
 })
 
-
 # Add or remove metrics here; must be valid for level = "dataset".
 METRICS <- c(
-  "meanSW",
-  "meanClassSW",
-  "pnSW",
-  "minClassSW",
-  "cdbw",
-  "cohesion",
-  "compactness",
-  "sep",
-  "dbcv"
+  "SI",
+  "ISI",
+  "NP",
+  "AMSP",
+  "PWC",
+  "NCE",
+  "adhesion",
+  "cohesion"
 )
 
 # arg parsing
 source("src/common/cli.R")
-p <- arg_parser("EMBED-M module")
+p <- arg_parser("GRAPH-M module")
 p <- add_base_args(p)                    # --output_dir, --name
-p <- add_stage_args(p, "EMBED-M")     # the stage I/O contract
+p <- add_stage_args(p, "GRAPH-M")     # the stage I/O contract
 # your own method params — argparser directly (its add_argument requires `help`):
 args <- parse_args(p)                    # argparser's own parser
 
@@ -42,24 +46,42 @@ for (i in 1:length(args)) {
 cat(sprintf("----------------------------------\n"))
 
 
+read_csr_h5 <- function(path) {
+  cell_ids <- as.character(h5read(path, "cell_ids"))
+  data <- as.numeric(h5read(path, "data"))
+  indices <- as.integer(h5read(path, "indices")) + 1L # 0-indexed → 1-indexed
+  indptr <- as.integer(h5read(path, "indptr"))
+  n <- length(indptr) - 1L
+  rows <- rep(seq_len(n), diff(indptr))
+  mat <- sparseMatrix(i = rows, j = indices, x = data, dims = c(n, n))
+  rownames(mat) <- colnames(mat) <- cell_ids
+  mat
+}
+
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-pca <- fread(args$pcas_tsv, header = TRUE)
+dist_mat <- read_csr_h5(args$neighbors_h5)
+cell_ids <- rownames(dist_mat)
+
 truth <- fread(args$rawdata_clusters_truth, header = TRUE)
 
-# Align embedding rows with truth labels by cell_id.
-idx <- match(pca$cell_id, truth$cell_id)
+idx <- match(cell_ids, truth$cell_id)
 mask <- !is.na(idx)
-aligned_embedding <- pca[mask, !"cell_id"]
-aligned_labels <- as.factor(truth$truths[idx[mask]])
+aligned_labels <- truth$truths[idx[mask]]
 
 n_cells <- sum(mask)
 n_labels <- length(unique(aligned_labels))
 n_dropped <- sum(!mask)
 
+if (mask[1] != TRUE || !all(mask)) {
+  dist_mat <- dist_mat[mask, mask]
+}
+
+g <- graph_from_adjacency_matrix(dist_mat, mode = "directed", weighted = TRUE)
+
 if (n_labels >= 2) {
-  result_df <- getEmbeddingMetrics(
-    aligned_embedding,
+  result_df <- getGraphMetrics(
+    g,
     labels = aligned_labels,
     metrics = METRICS,
     level = "dataset"
@@ -74,8 +96,5 @@ result <- c(
   list(n_cells = n_cells, n_labels = n_labels, n_dropped = n_dropped),
   scores
 )
-out <- file.path(
-  args$output_dir,
-  sprintf("%s_embedding_metrics.json", args$name)
-)
+out <- file.path(args$output_dir, sprintf("%s_graph_metrics.json", args$name))
 writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE), out)
