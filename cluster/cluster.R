@@ -12,11 +12,6 @@ suppressPackageStartupMessages({
   library(data.table)
 })
 
-cargs <- commandArgs(trailingOnly = FALSE)
-m <- grep("--file=", cargs)
-.run_dir <- dirname(gsub("--file=", "", cargs[[m]]))
-
-source(file.path(.run_dir, "..", "cli", "cli.R"))
 
 # Add or remove metrics here; must be valid for level = "dataset".
 METRICS <- c(
@@ -28,11 +23,27 @@ METRICS <- c(
   "EC"
 )
 
-args <- parse_args("cluster.json")
+# arg parsing
+source("src/common/cli.R")
+p <- arg_parser("CLUST-M module")
+p <- add_base_args(p)                    # --output_dir, --name
+p <- add_stage_args(p, "CLUST-M")     # the stage I/O contract
+# your own method params — argparser directly (its add_argument requires `help`):
+args <- parse_args(p)                    # argparser's own parser
+
+# logging
+cat(sprintf("Full command: %s\n", paste(commandArgs(trailingOnly = FALSE), collapse = " ")))
+cat(sprintf("LOG: command line args\n----------------------------------\n"))
+for (i in 1:length(args)) {
+  cat(sprintf("  %s: %s\n", names(args)[i], args[[i]]))
+}
+cat(sprintf("----------------------------------\n"))
+
+
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-pred <- fread(args$clusters, header = TRUE)
-truth <- fread(args$clusters_truth, header = TRUE)
+pred <- fread(args$clusters_tsv, header = TRUE)
+truth <- fread(args$rawdata_clusters_truth, header = TRUE)
 
 merged <- merge(pred, truth, by = "cell_id", all = FALSE)
 
