@@ -1,5 +1,5 @@
 [workspace]
-channels = ["conda-forge", "bioconda"]
+channels = ["almost-conductor", "conda-forge", "bioconda"]
 name = "metrics"
 platforms = ["linux-64"]
 version = "0.1.0"
@@ -20,3 +20,6 @@ r-jsonlite = "*"
 "r-data.table" = "*"
 bioconductor-biocversion = "3.22.*"
 bioconductor-poem = "*"
+# scSHC cluster-significance metric (cluster-shc-r)
+r-scshc = "*"        # from the almost-conductor channel
+r-hdf5r = "*"        # read raw counts from the h5ad

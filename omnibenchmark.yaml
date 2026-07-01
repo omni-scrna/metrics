@@ -5,23 +5,26 @@ entrypoints:
   embedding-r: embedding/embedding.R
   graph-r: graph/graph.R
   cluster-r:   cluster/cluster.R
+  cluster-shc-r: cluster/cluster_shc.R
 
 # Pointed to shared CLI helper code
 templates:
   repo: https://github.com/omni-scrna/boilerplate
-  ref: main            # the engine lives on boilerplate main
+  ref: main
   lang: r
+
+# TODO: this needs fixing in the sync script
 templates:
   repo: https://github.com/omni-scrna/boilerplate
-  ref: main            # the engine lives on boilerplate main
+  ref: main
   lang: python
 
-# Benchmark(s) that this module plugs into; `sync` vendors each one's schema/ dir into
+# Benchmark(s) that this module plugs into; `sync` copies each one's schema/ dir into
 # src/common/schema/. Tracking the unmerged contract branch for now.
 benchmarks:
   - name: split-stages
     repo: https://github.com/omni-scrna/split-stages-plan
     plan: benchmark_conda.yaml
-    ref: cleanup-26jun
+    ref: main
 
 
