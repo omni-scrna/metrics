@@ -1,9 +1,11 @@
 {
   "stage": "INTG8-M",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [
     { "flag": "--corrected_tsv", "type": "path", "help": "Batch-corrected embedding TSV (cell_id, corrected_dims)" },
-    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cluster labels (cell_id, truths)" }
+    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cluster labels (cell_id, truths)" },
+    { "flag": "--rawdata_h5ad", "type": "path", "help": "Pre-integration AnnData H5AD file (source of per-cell batch labels via obs/_index, obs/<batch_var>)" },
+    { "flag": "--properties_info", "type": "path", "help": "Dataset properties YAML (batch_var/sample_var/labels_var) naming which obs column in rawdata_h5ad holds the batch label" }
   ]
 }
