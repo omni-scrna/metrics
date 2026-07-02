@@ -1,0 +1,9 @@
+{
+  "stage": "INTG8-M",
+  "version": "0.1.1",
+  "benchmark": "omni-scrna/split-stages-plan",
+  "args": [
+    { "flag": "--corrected_tsv", "type": "path", "help": "Batch-corrected embedding TSV (cell_id, corrected_dims)" },
+    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cluster labels (cell_id, truths)" }
+  ]
+}

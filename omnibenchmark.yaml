@@ -6,6 +6,7 @@ entrypoints:
   graph-r: graph/graph.R
   cluster-r:   cluster/cluster.R
   annotation-r: annotation/annotation.R
+  integration-r: integration/integration.R
 
 # Pointed to shared CLI helper code
 templates:
