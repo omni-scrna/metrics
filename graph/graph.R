@@ -97,4 +97,4 @@ result <- c(
   scores
 )
 out <- file.path(args$output_dir, sprintf("%s_graph_metrics.json", args$name))
-writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE), out)
+writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE, na = "null"), out)
