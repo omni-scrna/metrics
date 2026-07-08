@@ -9,14 +9,25 @@ export-env = "pixi workspace export conda-environment --name $(basename $(git re
 
 [dependencies]
 # Python
-python = ">=3.14.4,<3.15"
+python = ">=3.12,<3.14"  # numba (scib-metrics -> pynndescent/umap-learn) has no cp314 wheels yet
 scikit-learn = "*"
-numpy = "*"
+numpy = "<2.5"  # numba (scib-metrics -> pynndescent/umap-learn) has no numpy>=2.5 support yet
 polars = "*"
+h5py = "*"
+pyyaml = "*"
 # R
 r-base = ">=4.5"
-r-argparse = "*"
+r-argparser = "*"
 r-jsonlite = "*"
 "r-data.table" = "*"
 bioconductor-biocversion = "3.22.*"
 bioconductor-poem = "*"
+bioconductor-cellmixs = "*"
+bioconductor-rhdf5 = "*"
+r-yaml = "*"
+r-mlmetrics = "*"
+
+[pypi-dependencies]
+# not on conda-forge/bioconda (checked via anaconda.org); pip-resolves its own
+# jax/jaxlib/scanpy/anndata/pynndescent transitive deps.
+scib-metrics = "*"
