@@ -7,6 +7,7 @@ entrypoints:
   cluster-r:   cluster/cluster.R
   annotation-r: annotation/annotation.R
   integration-r: integration/integration.R
+  integration-py: integration/integration.py
 
 # Pointed to shared CLI helper code
 templates:

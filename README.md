@@ -9,6 +9,7 @@ Metrics module for the [omni-scrna](https://github.com/omni-scrna) OmniBenchmark
 | `cluster-r` | R (poem) | Cluster assignment TSV | ARI, AMI, FM, VM, EH, EC |
 | `annotation-r` | R (MLmetrics) | Predicted cell-type annotation TSV | ACC, BACC, F1, KAPPA |
 | `integration-r` | R (CellMixS) | Batch-corrected embedding TSV | cms, entropy, isi |
+| `integration-py` | Python (scib-metrics) | Batch-corrected embedding TSV | label ASW, cLISI |
 | `embedding-py` | Python (sklearn) | PCA embedding TSV | silhouette, Davies-Bouldin, Calinski-Harabasz |
 | `embedding-r` | R (poem) | PCA embedding TSV | meanSW, meanClassSW, pnSW, minClassSW, CDbW, cohesion, compactness, sep, DBCV |
 | `graph-r` | R (poem) | KNN neighbor graph (HDF5) | SI, ISI, NP, AMSP, PWC, NCE, adhesion, cohesion |
@@ -28,3 +29,9 @@ label harmonization / ontology resolution mapping.
 Its metrics need a per-cell *batch* label rather than the cell-type truth every other
 entrypoint uses, so it takes two additional inputs (`--rawdata_h5ad`, `--properties_info`) to
 source it, mirroring the upstream `INTG8` method stage's own contract.
+
+`integration-py` targets the same `INTG8-M` stage as `integration-r` but evaluates bio-
+conservation instead of batch-mixing: label ASW and cLISI (both from
+[scib-metrics](https://github.com/YosefLab/scib-metrics)) compare the corrected embedding
+against cell-type truth only, so it accepts but doesn't use `--rawdata_h5ad`/
+`--properties_info` (required by the shared `INTG8-M` schema, unused here).
