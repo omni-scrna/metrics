@@ -68,14 +68,13 @@ n_cells <- nrow(merged)
 n_dropped <- nrow(pred) - n_cells
 n_labels <- length(unique(merged$truths))
 
-# NOTE: predicted (merged$annotation) and truth (merged$truths) labels are
+# NOTE: predicted (merged$predicted_labels) and truth (merged$truths) labels are
 # compared as-is below, with no label harmonization / resolution mapping —
 # i.e. no reconciliation of differing cell-type ontologies or granularities
 # (e.g. "CD4 T cell" predicted vs. "T cell" truth) between the two label
-# vocabularies. This is a known, deliberately deferred problem, not solved
-# here; see docs/human/GOAL.md sign-off residue.
+# vocabularies.
 if (n_labels >= 2) {
-  scores <- classification_metrics(merged$annotation, merged$truths)
+  scores <- classification_metrics(merged$predicted_labels, merged$truths)
 } else {
   scores <- setNames(as.list(rep(NA_real_, length(METRICS))), METRICS)
 }
