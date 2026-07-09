@@ -26,6 +26,7 @@ bioconductor-cellmixs = "*"
 bioconductor-rhdf5 = "*"
 r-yaml = "*"
 r-mlmetrics = "*"
+r-ontologyindex = "*"
 
 [pypi-dependencies]
 # not on conda-forge/bioconda (checked via anaconda.org); pip-resolves its own

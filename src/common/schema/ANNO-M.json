@@ -1,9 +1,10 @@
 {
   "stage": "ANNO-M",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [
     { "flag": "--annotations_tsv", "type": "path", "help": "Predicted cell-type annotations TSV (cell_id, annotation)" },
-    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cell-type labels (cell_id, truths)" }
+    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cell-type labels (cell_id, truths)" },
+    { "flag": "--cell_ontology_obo", "type": "path", "help": "Dataset-specific Cell Ontology DAG in OBO format (id: CL term IDs, is_a relations) — used for resolution-aware annotation accuracy (exact/parent/child/sibling match, no-match rate) against annotations_tsv's CL_pred / rawdata_clusters_truth's CL_label columns" }
   ]
 }

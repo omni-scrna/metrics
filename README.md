@@ -7,7 +7,7 @@ Metrics module for the [omni-scrna](https://github.com/omni-scrna) OmniBenchmark
 | Entrypoint | Language | Input | Metrics |
 |---|---|---|---|
 | `cluster-r` | R (poem) | Cluster assignment TSV | ARI, AMI, FM, VM, EH, EC |
-| `annotation-r` | R (MLmetrics) | Predicted cell-type annotation TSV | ACC, BACC, F1, KAPPA |
+| `annotation-r` | R (MLmetrics, ontologyIndex) | Predicted cell-type annotation TSV | ACC, BACC, F1, KAPPA, EXACT, PARENT, CHILD, SIBLING, NO_MATCH |
 | `integration-r` | R (CellMixS) | Batch-corrected embedding TSV | cms, entropy, isi, ldfDiff |
 | `integration-py` | Python (scib-metrics) | Batch-corrected embedding TSV | label ASW, cLISI, PCR comparison |
 | `embedding-py` | Python (sklearn) | PCA embedding TSV | silhouette, Davies-Bouldin, Calinski-Harabasz |
@@ -22,8 +22,13 @@ and writes one JSON scores file (`<name>_<stage>_metrics.json`) to `--output_dir
 `cluster-r` and `annotation-r` both compare predicted vs. true cell-type labels, but as
 different kinds of problem: `cluster-r` treats it as a clustering/partition comparison (poem's
 partition metrics), while `annotation-r` treats it as a classification-agreement problem
-(accuracy-family metrics) — predicted and truth label vocabularies are compared as-is, with no
-label harmonization / ontology resolution mapping.
+(accuracy-family metrics) — predicted and truth label vocabularies (`predicted_labels`/
+`truths`) are compared as-is, with no label harmonization / ontology resolution mapping.
+`annotation-r` additionally scores a second, ontology-ID-based pair of columns (`CL_pred`/
+`CL_label`) for resolution-aware accuracy (popV,
+https://www.nature.com/articles/s41588-024-01993-3): `EXACT`/`PARENT`/`CHILD`/`SIBLING` match
+rates + a `NO_MATCH` rate, classifying each cell's prediction against truth via one-hop `is_a`
+relationships in a dataset-specific Cell Ontology DAG supplied as `--cell_ontology_obo`.
 
 `integration-r` is a third kind of problem again: batch-mixing rather than label agreement.
 Its metrics need a per-cell *batch* label rather than the cell-type truth every other

@@ -294,6 +294,7 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-memoise-2.0.1-r45hc72bb7e_4.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-mlmetrics-1.1.3-r45hc72bb7e_2.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-munsell-0.5.1-r45hc72bb7e_2.conda
+      - conda: https://conda.anaconda.org/conda-forge/noarch/r-ontologyindex-2.12-r45hc72bb7e_2.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-openssl-2.4.2-r45h68c19f5_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/r-pdist-1.2.1-r45h54b55ab_4.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/r-pheatmap-1.0.13-r45hc72bb7e_1.conda
@@ -5257,6 +5258,16 @@ packages:
   purls: []
   size: 247241
   timestamp: 1757455926748
+- conda: https://conda.anaconda.org/conda-forge/noarch/r-ontologyindex-2.12-r45hc72bb7e_2.conda
+  sha256: 009847624b7c80cb333755bd671ec16eaaec0b1dc08b2105e210d52abccc7298
+  md5: 908f48b83f4d28eda9b0375bafad811f
+  depends:
+  - r-base >=4.5,<4.6.0a0
+  license: GPL-2.0-or-later
+  license_family: GPL3
+  purls: []
+  size: 2130479
+  timestamp: 1757829912622
 - conda: https://conda.anaconda.org/conda-forge/linux-64/r-openssl-2.4.2-r45h68c19f5_0.conda
   sha256: 2796cf7768c939a58344157fcddec88dbdadf9cabd3ab0b24d9bbaf7916b9ebd
   md5: 6568a5797c9d74e89ef94b82724665aa
