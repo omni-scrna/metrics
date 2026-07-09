@@ -28,7 +28,8 @@ partition metrics), while `annotation-r` treats it as a classification-agreement
 `CL_label`) for resolution-aware accuracy (popV,
 https://www.nature.com/articles/s41588-024-01993-3): `EXACT`/`PARENT`/`CHILD`/`SIBLING` match
 rates + a `NO_MATCH` rate, classifying each cell's prediction against truth via one-hop `is_a`
-relationships in a dataset-specific Cell Ontology DAG supplied as `--cell_ontology_obo`.
+relationships in the general Cell Ontology (CL) DAG, pinned to a fixed release and supplied
+as `--cell_ontology_obo`.
 
 `integration-r` is a third kind of problem again: batch-mixing rather than label agreement.
 Its metrics need a per-cell *batch* label rather than the cell-type truth every other
