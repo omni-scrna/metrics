@@ -19,6 +19,12 @@
 #   strictly row-aligned (same cell set, same order) rather than grouped per batch.
 #   categorical=True is required (not exposed as a flag) since batch labels are strings —
 #   scib-metrics' own Benchmarker always passes it for batch covariates.
+# - ari/nmi: biological-preservation metrics — how well cluster labels obtained by clustering
+#   the *integrated* embedding (--clusters_corrected_tsv, the CLUST-C stage's output) recover
+#   the cell-type truth. scib_metrics has no function that scores externally-supplied cluster
+#   labels: nmi_ari_cluster_labels_kmeans/leiden cluster internally and are themselves thin
+#   wrappers around sklearn.metrics.cluster.adjusted_rand_score/normalized_mutual_info_score —
+#   so we call those directly against the real CLUST-C labels instead.
 
 import argparse
 import sys
@@ -34,6 +40,7 @@ from common import cli  # noqa: E402
 
 import scib_metrics
 from scib_metrics.nearest_neighbors import pynndescent
+from sklearn.metrics import adjusted_rand_score, normalized_mutual_info_score
 
 
 def parse_args():
@@ -42,7 +49,7 @@ def parse_args():
     # hand-rolled below, so the whole CLI stays visible here.
     p = argparse.ArgumentParser(description="INTG8-M module (scib-metrics-backed)")
     cli.add_base_args(p)              # --output_dir, --name
-    cli.add_stage_args(p, "INTG8-M")  # --corrected_tsv, --rawdata_clusters_truth, --rawdata_h5ad, --properties_info, --pcas_tsv
+    cli.add_stage_args(p, "INTG8-M")  # --corrected_tsv, --rawdata_clusters_truth, --rawdata_h5ad, --properties_info, --pcas_tsv, --clusters_corrected_tsv
     p.add_argument("--n_neighbors", type=int, default=90,
                    help="Neighborhood size (knn) for the graph clisi_knn is computed over")
     p.add_argument("--random_state", type=int, default=0,
@@ -84,6 +91,22 @@ def main() -> None:
     else:
         label_asw = float("nan")
         clisi = float("nan")
+
+    # ari/nmi: cell-type truth vs. the CLUST-C cluster labels, row-aligned by cell_id against
+    # the same corrected_tsv/truth-restricted cell set used for label_asw/clisi above.
+    clusters_df = pl.read_csv(args.clusters_corrected_tsv, separator="\t")
+    merged_clusters = merged.join(
+        clusters_df.select(["cell_id", "cluster"]), on="cell_id", how="inner"
+    )
+
+    if n_labels >= 2:
+        aligned_truths = merged_clusters["truths"].cast(str).to_numpy()
+        aligned_clusters = merged_clusters["cluster"].cast(str).to_numpy()
+        ari = float(adjusted_rand_score(aligned_truths, aligned_clusters))
+        nmi = float(normalized_mutual_info_score(aligned_truths, aligned_clusters))
+    else:
+        ari = float("nan")
+        nmi = float("nan")
 
     # Batch labels: a different source than the cell-type truth above. Some datasets declare no
     # batch_var at all, in which case batch-based metrics aren't computable.
@@ -132,6 +155,8 @@ def main() -> None:
                 "label_asw": label_asw,
                 "clisi": clisi,
                 "pcr": pcr,
+                "ari": ari,
+                "nmi": nmi,
             },
             fh,
             indent=2,

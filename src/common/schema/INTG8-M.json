@@ -1,12 +1,13 @@
 {
   "stage": "INTG8-M",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [
     { "flag": "--corrected_tsv", "type": "path", "help": "Batch-corrected embedding TSV (cell_id, corrected_dims)" },
     { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cluster labels (cell_id, truths)" },
     { "flag": "--rawdata_h5ad", "type": "path", "help": "Pre-integration AnnData H5AD file (source of per-cell batch labels via obs/_index, obs/<batch_var>)" },
     { "flag": "--properties_info", "type": "path", "help": "Dataset properties YAML (batch_var/sample_var/labels_var) naming which obs column in rawdata_h5ad holds the batch label" },
-    { "flag": "--pcas_tsv", "type": "path", "help": "Pre-integration joint PCA embedding TSV (cell_id, PCs) from the PCA stage — the 'before' embedding for local-structure-distortion metrics (CellMixS ldfDiff; scib-metrics pcr_comparison)" }
+    { "flag": "--pcas_tsv", "type": "path", "help": "Pre-integration joint PCA embedding TSV (cell_id, PCs) from the PCA stage — the 'before' embedding for local-structure-distortion metrics (CellMixS ldfDiff; scib-metrics pcr_comparison)" },
+    { "flag": "--clusters_corrected_tsv", "type": "path", "help": "Cluster labels TSV (cell_id, cluster) from clustering performed on the integrated/corrected embedding (CLUST-C stage)" }
   ]
 }
