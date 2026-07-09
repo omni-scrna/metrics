@@ -3,8 +3,8 @@
   "version": "0.2.0",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [
-    { "flag": "--annotations_tsv", "type": "path", "help": "Predicted cell-type annotations TSV (cell_id, predicted_labels)" },
-    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cell-type labels (cell_id, truths)" },
+    { "flag": "--annotations_tsv", "type": "path", "help": "Predicted cell-type annotations TSV (cell_id, predicted_labels, CL_pred)" },
+    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cell-type labels (cell_id, truths, CL_label)" },
     { "flag": "--cell_ontology_obo", "type": "path", "help": "General Cell Ontology (CL) DAG in OBO format, pinned to a fixed release (id: CL term IDs, is_a relations) — used for resolution-aware annotation accuracy (exact/parent/child/sibling match, no-match rate) against annotations_tsv's CL_pred / rawdata_clusters_truth's CL_label columns" }
   ]
 }
