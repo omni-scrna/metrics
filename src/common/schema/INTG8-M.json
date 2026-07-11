@@ -1,6 +1,6 @@
 {
   "stage": "INTG8-M",
-  "version": "0.4.0",
+  "version": "0.0.1",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [
     { "flag": "--corrected_tsv", "type": "path", "help": "Batch-corrected embedding TSV (cell_id, corrected_dims)" },
