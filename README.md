@@ -9,7 +9,7 @@ Metrics module for the [omni-scrna](https://github.com/omni-scrna) OmniBenchmark
 | `cluster-r` | R (poem) | Cluster assignment TSV | ARI, AMI, FM, VM, EH, EC |
 | `annotation-r` | R (MLmetrics) | Predicted cell-type annotation TSV | ACC, BACC, F1, KAPPA |
 | `integration-r` | R (CellMixS) | Batch-corrected embedding TSV | cms, entropy, isi, ldfDiff |
-| `integration-py` | Python (scib-metrics) | Batch-corrected embedding TSV | label ASW, cLISI, PCR comparison |
+| `integration-py` | Python (scib-metrics + sklearn) | Batch-corrected embedding TSV | label ASW, cLISI, PCR comparison, ARI, NMI |
 | `embedding-py` | Python (sklearn) | PCA embedding TSV | silhouette, Davies-Bouldin, Calinski-Harabasz |
 | `embedding-r` | R (poem) | PCA embedding TSV | meanSW, meanClassSW, pnSW, minClassSW, CDbW, cohesion, compactness, sep, DBCV |
 | `graph-r` | R (poem) | KNN neighbor graph (HDF5) | SI, ISI, NP, AMSP, PWC, NCE, adhesion, cohesion |
@@ -43,4 +43,10 @@ from [scib-metrics](https://github.com/YosefLab/scib-metrics)) compare the corre
 against cell-type truth, while PCR comparison (`scib_metrics.pcr_comparison`) compares batch
 covariate variance explained in the pre- vs. post-integration embedding — so it now uses
 `--rawdata_h5ad`/`--properties_info` (for per-cell batch labels) and `--pcas_tsv` (for the
-pre-integration embedding) in addition to `--corrected_tsv`/`--rawdata_clusters_truth`.
+pre-integration embedding) in addition to `--corrected_tsv`/`--rawdata_clusters_truth`. ARI and
+NMI (`sklearn.metrics`) are a fourth, biological-preservation metric pair: how well cluster
+labels obtained by clustering the *integrated* embedding (`--clusters_corrected_tsv`, the
+`CLUST-C` stage's output) recover the cell-type truth. `scib-metrics` itself has no function
+that scores externally-supplied cluster labels — its own `nmi_ari_cluster_labels_kmeans/leiden`
+cluster internally and are thin wrappers around exactly these two `sklearn` calls — so ARI/NMI
+are computed directly against the real `CLUST-C` labels instead of re-clustering.
