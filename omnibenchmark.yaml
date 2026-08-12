@@ -1,6 +1,7 @@
 # OmniBenchmark Module Configuration
 
 entrypoints:
+  normalization-r: normalization/normalization.R
   embedding-py: embedding/embedding.py
   embedding-r: embedding/embedding.R
   graph-r: graph/graph.R
