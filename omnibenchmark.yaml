@@ -8,6 +8,7 @@ entrypoints:
   annotation-r: annotation/annotation.R
   integration-r: integration/integration.R
   integration-py: integration/integration.py
+  geometry-py: geometry/geometry.py
 
 # Pointed to shared CLI helper code
 templates:
@@ -25,6 +26,6 @@ benchmarks:
   - name: split-stages
     repo: https://github.com/omni-scrna/split-stages-plan
     plan: benchmark_conda.yaml
-    ref: cleanup-26jun
+    ref: add-geometry-stage
 
 
