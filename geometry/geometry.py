@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 
-"""Geometry metrics for OmniBenchmark.
+"""Pairwise representation geometry metrics for OmniBenchmark.
 
-This module compares Euclidean distances in a PCA representation with
-shortest-path distances on the corresponding k-nearest-neighbor graph.
+This module compares pairwise distances across the pre-PCA gene
+representation, PCA space, and graph-geodesic space.
 """
 
 import argparse
@@ -14,7 +14,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 import polars as pl
-from scipy.sparse import coo_matrix, csr_matrix
+from scipy.sparse import csc_matrix, coo_matrix, csr_matrix, issparse
 from scipy.sparse.csgraph import connected_components, dijkstra
 from scipy.stats import pearsonr, spearmanr
 
@@ -39,6 +39,53 @@ def parse_args():
     cli.add_stage_args(parser, "GEOM-M")
     return parser.parse_args()
 
+def read_gene_representation(path: Path) -> tuple[list[str], csr_matrix]:
+    """Read the normalized gene-selected matrix as cells by genes.
+
+    The OmniBenchmark FEAT artifact stores the sparse matrix as
+    genes by cells in CSC format. This function transposes it to
+    cells by genes in CSR format for pairwise cell-distance calculations.
+    """
+    with h5py.File(path, "r") as handle:
+        matrix = handle["matrix"]
+
+        cell_ids = matrix["barcodes"].asstr()[:].tolist()
+        n_genes = len(matrix["genes"])
+
+        data = np.asarray(
+            matrix["data"][:],
+            dtype=float,
+        )
+        indices = np.asarray(
+            matrix["indices"][:],
+            dtype=int,
+        )
+        indptr = np.asarray(
+            matrix["indptr"][:],
+            dtype=int,
+        )
+        stored_shape = tuple(
+            int(value)
+            for value in matrix["shape"][:]
+        )
+
+    n_cells = len(cell_ids)
+    expected_shape = (n_genes, n_cells)
+
+    if stored_shape != expected_shape:
+        raise ValueError(
+            "Normalized selected matrix has an unexpected shape: "
+            f"stored={stored_shape}, expected={expected_shape}."
+        )
+
+    stored_matrix = csc_matrix(
+        (data, indices, indptr),
+        shape=stored_shape,
+    )
+
+    gene_matrix = stored_matrix.T.tocsr()
+
+    return cell_ids, gene_matrix
 
 def read_neighbor_graph(path: Path) -> tuple[list[str], csr_matrix]:
     """Read the distance-based CSR neighbor graph from HDF5."""
@@ -57,6 +104,109 @@ def read_neighbor_graph(path: Path) -> tuple[list[str], csr_matrix]:
 
     return cell_ids, graph
 
+def align_representations(
+    gene_cell_ids: list[str],
+    gene_matrix: csr_matrix,
+    pca_df: pl.DataFrame,
+    graph_cell_ids: list[str],
+) -> tuple[csr_matrix, np.ndarray, list[str]]:
+    """Align gene and PCA representations to the graph cell order."""
+    if gene_matrix.shape[0] != len(gene_cell_ids):
+        raise ValueError(
+            "Gene matrix row count does not match the number of gene-space cell IDs."
+        )
+
+    if "cell_id" not in pca_df.columns:
+        raise ValueError(
+            "PCA input does not contain a 'cell_id' column."
+        )
+
+    pca_cell_ids = pca_df["cell_id"].to_list()
+
+    id_groups = {
+        "gene": gene_cell_ids,
+        "PCA": pca_cell_ids,
+        "graph": graph_cell_ids,
+    }
+
+    for name, cell_ids in id_groups.items():
+        if len(cell_ids) != len(set(cell_ids)):
+            raise ValueError(
+                f"{name} input contains duplicate cell IDs."
+            )
+
+    graph_id_set = set(graph_cell_ids)
+
+    for name, cell_ids in (
+        ("gene", gene_cell_ids),
+        ("PCA", pca_cell_ids),
+    ):
+        cell_id_set = set(cell_ids)
+
+        missing = graph_id_set - cell_id_set
+        extra = cell_id_set - graph_id_set
+
+        if missing or extra:
+            raise ValueError(
+                f"{name} and graph inputs do not contain the same cell set: "
+                f"missing={len(missing)}, extra={len(extra)}."
+            )
+
+    gene_index = {
+        cell_id: index
+        for index, cell_id in enumerate(gene_cell_ids)
+    }
+
+    gene_order = np.asarray(
+        [
+            gene_index[cell_id]
+            for cell_id in graph_cell_ids
+        ],
+        dtype=int,
+    )
+
+    aligned_gene_matrix = gene_matrix[gene_order]
+
+    pca_columns = [
+        column
+        for column in pca_df.columns
+        if column != "cell_id"
+    ]
+
+    if not pca_columns:
+        raise ValueError(
+            "No PCA coordinate columns were found."
+        )
+
+    pca_coordinates = pca_df.select(
+        pca_columns
+    ).to_numpy()
+
+    pca_index = {
+        cell_id: index
+        for index, cell_id in enumerate(pca_cell_ids)
+    }
+
+    pca_order = np.asarray(
+        [
+            pca_index[cell_id]
+            for cell_id in graph_cell_ids
+        ],
+        dtype=int,
+    )
+
+    aligned_pca_coordinates = pca_coordinates[pca_order]
+
+    if not np.all(np.isfinite(aligned_pca_coordinates)):
+        raise ValueError(
+            "PCA coordinates contain NaN or infinite values."
+        )
+
+    return (
+        aligned_gene_matrix,
+        aligned_pca_coordinates,
+        pca_columns,
+    )
 
 def symmetrize_distance_graph(graph: csr_matrix) -> csr_matrix:
     """Convert a directed distance graph into an undirected distance graph.
@@ -181,21 +331,55 @@ def sample_cell_pairs(
         np.asarray(target_indices, dtype=int),
     )
 
+def calculate_euclidean_distances(
+    coordinates,
+    source_indices: np.ndarray,
+    target_indices: np.ndarray,
+) -> np.ndarray:
+    """Calculate Euclidean distances for sampled cell pairs."""
+    if len(source_indices) != len(target_indices):
+        raise ValueError(
+            "Source and target index arrays must have the same length."
+        )
 
-def calculate_sampled_distances(
-    coordinates: np.ndarray,
+    if len(source_indices) == 0:
+        return np.array([], dtype=float)
+
+    if issparse(coordinates):
+        differences = (
+            coordinates[source_indices]
+            - coordinates[target_indices]
+        )
+
+        squared_distances = np.asarray(
+            differences.multiply(differences).sum(axis=1)
+        ).ravel()
+
+        return np.sqrt(squared_distances)
+
+    differences = (
+        coordinates[source_indices]
+        - coordinates[target_indices]
+    )
+
+    return np.linalg.norm(
+        differences,
+        axis=1,
+    )
+
+def calculate_geodesic_distances(
     graph: csr_matrix,
     source_indices: np.ndarray,
     target_indices: np.ndarray,
-) -> tuple[np.ndarray, np.ndarray]:
-    """Calculate Euclidean and graph-geodesic distances for sampled pairs."""
-    if len(source_indices) == 0:
-        return np.array([], dtype=float), np.array([], dtype=float)
+) -> np.ndarray:
+    """Calculate graph-geodesic distances for sampled cell pairs."""
+    if len(source_indices) != len(target_indices):
+        raise ValueError(
+            "Source and target index arrays must have the same length."
+        )
 
-    euclidean_distances = np.linalg.norm(
-        coordinates[source_indices] - coordinates[target_indices],
-        axis=1,
-    )
+    if len(source_indices) == 0:
+        return np.array([], dtype=float)
 
     unique_sources, source_inverse = np.unique(
         source_indices,
@@ -209,72 +393,153 @@ def calculate_sampled_distances(
         return_predecessors=False,
     )
 
-    geodesic_distances = shortest_paths[
+    return shortest_paths[
         source_inverse,
         target_indices,
     ]
 
+def calculate_sampled_distances(
+    coordinates: np.ndarray,
+    graph: csr_matrix,
+    source_indices: np.ndarray,
+    target_indices: np.ndarray,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate Euclidean and graph-geodesic distances for sampled pairs."""
+    euclidean_distances = calculate_euclidean_distances(
+        coordinates=coordinates,
+        source_indices=source_indices,
+        target_indices=target_indices,
+    )
+
+    geodesic_distances = calculate_geodesic_distances(
+        graph=graph,
+        source_indices=source_indices,
+        target_indices=target_indices,
+    )
+
     return euclidean_distances, geodesic_distances
 
+def compare_distances(
+    reference_distances: np.ndarray,
+    comparison_distances: np.ndarray,
+) -> dict:
+    """Compare pairwise distances between two representations."""
+    if len(reference_distances) != len(comparison_distances):
+        raise ValueError(
+            "Distance arrays must have the same length."
+        )
+
+    finite_mask = (
+        np.isfinite(reference_distances)
+        & np.isfinite(comparison_distances)
+    )
+
+    finite_reference = reference_distances[finite_mask]
+    finite_comparison = comparison_distances[finite_mask]
+
+    positive_reference_mask = finite_reference > 0
+
+    ratio_reference = finite_reference[
+        positive_reference_mask
+    ]
+    ratio_comparison = finite_comparison[
+        positive_reference_mask
+    ]
+
+    if len(finite_reference) >= 2:
+        pearson_result = pearsonr(
+            finite_reference,
+            finite_comparison,
+        )
+
+        spearman_result = spearmanr(
+            finite_reference,
+            finite_comparison,
+        )
+
+        pearson_correlation = float(
+            pearson_result.statistic
+        )
+
+        spearman_correlation = float(
+            spearman_result.statistic
+        )
+    else:
+        pearson_correlation = None
+        spearman_correlation = None
+
+    if len(ratio_reference) > 0:
+        distance_ratios = (
+            ratio_comparison / ratio_reference
+        )
+
+        median_ratio = float(
+            np.median(distance_ratios)
+        )
+    else:
+        median_ratio = None
+
+    return {
+        "n_sampled_pairs": int(
+            len(reference_distances)
+        ),
+        "n_finite_sampled_pairs": int(
+            np.sum(finite_mask)
+        ),
+        "nonfinite_pair_fraction": (
+            float(1.0 - np.mean(finite_mask))
+            if len(finite_mask) > 0
+            else None
+        ),
+        "pearson": pearson_correlation,
+        "spearman": spearman_correlation,
+        "median_comparison_to_reference_ratio": (
+            median_ratio
+        ),
+    }
 
 def calculate_geometry_metrics(
     euclidean_distances: np.ndarray,
     geodesic_distances: np.ndarray,
 ) -> dict:
-    """Calculate Euclidean-geodesic agreement metrics."""
-    finite_mask = (
-        np.isfinite(euclidean_distances)
-        & np.isfinite(geodesic_distances)
+    """Calculate legacy Euclidean-geodesic agreement metrics."""
+    comparison = compare_distances(
+        reference_distances=euclidean_distances,
+        comparison_distances=geodesic_distances,
     )
 
-    finite_euclidean = euclidean_distances[finite_mask]
-    finite_geodesic = geodesic_distances[finite_mask]
-
-    positive_mask = finite_euclidean > 0
-
-    ratio_euclidean = finite_euclidean[positive_mask]
-    ratio_geodesic = finite_geodesic[positive_mask]
-
-    if len(finite_euclidean) >= 2:
-        pearson_result = pearsonr(
-            finite_euclidean,
-            finite_geodesic,
-        )
-        spearman_result = spearmanr(
-            finite_euclidean,
-            finite_geodesic,
-        )
-
-        pearson_correlation = float(pearson_result.statistic)
-        spearman_correlation = float(spearman_result.statistic)
-    else:
-        pearson_correlation = None
-        spearman_correlation = None
-
-    if len(ratio_euclidean) > 0:
-        distance_ratios = ratio_geodesic / ratio_euclidean
-
-        median_ratio = float(np.median(distance_ratios))
-    else:
-        median_ratio = None
-
     return {
-        "n_sampled_pairs": int(len(euclidean_distances)),
-        "n_finite_sampled_pairs": int(np.sum(finite_mask)),
-        "sampled_disconnected_pair_fraction": float(
-            1.0 - np.mean(finite_mask)
-        ) if len(finite_mask) > 0 else None,
-        "pearson_euclidean_geodesic": pearson_correlation,
-        "spearman_euclidean_geodesic": spearman_correlation,
-        "median_geodesic_to_euclidean_ratio": median_ratio,
+        "n_sampled_pairs": comparison[
+            "n_sampled_pairs"
+        ],
+        "n_finite_sampled_pairs": comparison[
+            "n_finite_sampled_pairs"
+        ],
+        "sampled_disconnected_pair_fraction": comparison[
+            "nonfinite_pair_fraction"
+        ],
+        "pearson_euclidean_geodesic": comparison[
+            "pearson"
+        ],
+        "spearman_euclidean_geodesic": comparison[
+            "spearman"
+        ],
+        "median_geodesic_to_euclidean_ratio": comparison[
+            "median_comparison_to_reference_ratio"
+        ],
     }
 
 
 def main() -> None:
     args = parse_args()
 
+    log(f"normalized_selected_h5={args.normalized_selected_h5}")
     log(f"pcas_tsv={args.pcas_tsv}")
     log(f"neighbors_h5={args.neighbors_h5}")
+
+    gene_cell_ids, gene_matrix = read_gene_representation(
+        args.normalized_selected_h5
+    )
 
     pca_df = pl.read_csv(
         args.pcas_tsv,
@@ -285,61 +550,41 @@ def main() -> None:
         args.neighbors_h5
     )
 
-    graph_ids_df = pl.DataFrame(
-        {
-            "cell_id": graph_cell_ids,
-            "graph_index": np.arange(
-                len(graph_cell_ids),
-                dtype=int,
-            ),
-        }
-    )
-
-    aligned = (
-        graph_ids_df
-        .join(
-            pca_df,
-            on="cell_id",
-            how="inner",
-        )
-        .sort("graph_index")
-    )
-
+    n_gene_cells = len(gene_cell_ids)
     n_pca_cells = len(pca_df)
     n_graph_cells = len(graph_cell_ids)
-    n_aligned_cells = len(aligned)
 
     log(
-        "cell counts: "
+        "cell counts before alignment: "
+        f"gene={n_gene_cells}, "
         f"pca={n_pca_cells}, "
-        f"graph={n_graph_cells}, "
-        f"aligned={n_aligned_cells}"
+        f"graph={n_graph_cells}"
     )
 
-    if n_aligned_cells != n_graph_cells:
+    if not np.all(np.isfinite(gene_matrix.data)):
         raise ValueError(
-            "PCA and graph inputs do not contain the same filtered cell set."
+            "Gene representation contains NaN or infinite values."
         )
 
-    pca_columns = [
-        column
-        for column in pca_df.columns
-        if column != "cell_id"
-    ]
+    (
+        aligned_gene_matrix,
+        aligned_pca_coordinates,
+        pca_columns,
+    ) = align_representations(
+        gene_cell_ids=gene_cell_ids,
+        gene_matrix=gene_matrix,
+        pca_df=pca_df,
+        graph_cell_ids=graph_cell_ids,
+    )
 
-    if not pca_columns:
-        raise ValueError(
-            "No PCA coordinate columns were found."
-        )
+    n_aligned_cells = len(graph_cell_ids)
 
-    coordinates = aligned.select(
-        pca_columns
-    ).to_numpy()
-
-    if not np.all(np.isfinite(coordinates)):
-        raise ValueError(
-            "PCA coordinates contain NaN or infinite values."
-        )
+    log(
+        "aligned representations: "
+        f"cells={n_aligned_cells}, "
+        f"genes={aligned_gene_matrix.shape[1]}, "
+        f"pcs={len(pca_columns)}"
+    )
 
     symmetric_graph = symmetrize_distance_graph(
         directed_graph
@@ -367,18 +612,37 @@ def main() -> None:
         n_cells=n_aligned_cells,
     )
 
-    euclidean_distances, geodesic_distances = (
-        calculate_sampled_distances(
-            coordinates=coordinates,
-            graph=symmetric_graph,
-            source_indices=source_indices,
-            target_indices=target_indices,
-        )
+    gene_distances = calculate_euclidean_distances(
+        coordinates=aligned_gene_matrix,
+        source_indices=source_indices,
+        target_indices=target_indices,
     )
 
-    geometry_metrics = calculate_geometry_metrics(
-        euclidean_distances,
-        geodesic_distances,
+    pca_distances = calculate_euclidean_distances(
+        coordinates=aligned_pca_coordinates,
+        source_indices=source_indices,
+        target_indices=target_indices,
+    )
+
+    geodesic_distances = calculate_geodesic_distances(
+        graph=symmetric_graph,
+        source_indices=source_indices,
+        target_indices=target_indices,
+    )
+
+    gene_pca_metrics = compare_distances(
+        reference_distances=gene_distances,
+        comparison_distances=pca_distances,
+    )
+
+    gene_geodesic_metrics = compare_distances(
+        reference_distances=gene_distances,
+        comparison_distances=geodesic_distances,
+    )
+
+    pca_geodesic_metrics = compare_distances(
+        reference_distances=pca_distances,
+        comparison_distances=geodesic_distances,
     )
 
     output_dir = Path(args.output_dir)
@@ -393,11 +657,17 @@ def main() -> None:
     )
 
     result = {
+        "n_gene_cells": n_gene_cells,
         "n_pca_cells": n_pca_cells,
         "n_graph_cells": n_graph_cells,
         "n_aligned_cells": n_aligned_cells,
+        "n_selected_genes": int(
+            aligned_gene_matrix.shape[1]
+        ),
         "n_pca_dimensions": len(pca_columns),
-        "directed_graph_nnz": int(directed_graph.nnz),
+        "directed_graph_nnz": int(
+            directed_graph.nnz
+        ),
         "symmetrized_graph_nnz": int(
             symmetric_graph.nnz
         ),
@@ -412,7 +682,23 @@ def main() -> None:
             "max_source_cells": MAX_SOURCE_CELLS,
             "targets_per_source": TARGETS_PER_SOURCE,
         },
-        "metrics": geometry_metrics,
+        "metrics": {
+            "gene_pca": {
+                "reference_space": "gene",
+                "comparison_space": "pca",
+                **gene_pca_metrics,
+            },
+            "gene_geodesic": {
+                "reference_space": "gene",
+                "comparison_space": "geodesic",
+                **gene_geodesic_metrics,
+            },
+            "pca_geodesic": {
+                "reference_space": "pca",
+                "comparison_space": "geodesic",
+                **pca_geodesic_metrics,
+            },
+        },
     }
 
     with open(
@@ -426,8 +712,7 @@ def main() -> None:
             indent=2,
         )
 
-    log(f"wrote {output_path}")
-
+    log(f"wrote metrics to {output_path}")
 
 if __name__ == "__main__":
     main()
