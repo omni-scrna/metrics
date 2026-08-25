@@ -14,8 +14,9 @@ from pathlib import Path
 import h5py
 import numpy as np
 import polars as pl
+import networkx as nx
 from scipy.sparse import csc_matrix, coo_matrix, csr_matrix, issparse
-from scipy.sparse.csgraph import connected_components, dijkstra
+from scipy.sparse.csgraph import connected_components
 from scipy.stats import pearsonr, spearmanr
 
 sys.path.insert(0, str(Path(__file__).parent / "../src"))
@@ -381,22 +382,42 @@ def calculate_geodesic_distances(
     if len(source_indices) == 0:
         return np.array([], dtype=float)
 
-    unique_sources, source_inverse = np.unique(
-        source_indices,
-        return_inverse=True,
-    )
-
-    shortest_paths = dijkstra(
+    nx_graph = nx.from_scipy_sparse_array(
         graph,
-        directed=False,
-        indices=unique_sources,
-        return_predecessors=False,
+        create_using=nx.Graph,
+        edge_attribute="weight",
     )
 
-    return shortest_paths[
-        source_inverse,
-        target_indices,
-    ]
+    distances = np.full(
+        len(source_indices),
+        np.inf,
+        dtype=float,
+    )
+
+    unique_sources = np.unique(source_indices)
+
+    for source in unique_sources:
+        source = int(source)
+
+        shortest_paths = nx.single_source_dijkstra_path_length(
+            nx_graph,
+            source,
+            weight="weight",
+        )
+
+        pair_positions = np.flatnonzero(
+            source_indices == source
+        )
+
+        for position in pair_positions:
+            target = int(target_indices[position])
+
+            distances[position] = shortest_paths.get(
+                target,
+                np.inf,
+            )
+
+    return distances
 
 def calculate_sampled_distances(
     coordinates: np.ndarray,

@@ -3,6 +3,7 @@ import numpy as np
 import pytest
 import polars as pl
 from scipy.sparse import csc_matrix, csr_matrix
+from scipy.sparse.csgraph import dijkstra
 from geometry.geometry import (
     calculate_sampled_distances,
     calculate_euclidean_distances,
@@ -12,7 +13,6 @@ from geometry.geometry import (
     read_gene_representation,
     sample_cell_pairs,
     align_representations,
-    symmetrize_distance_graph,
     symmetrize_distance_graph,
 )
 
@@ -229,6 +229,67 @@ def test_align_representations_rejects_duplicate_cell_ids():
             pca_df=pca_df,
             graph_cell_ids=graph_cell_ids,
         )
+
+def test_networkx_geodesic_matches_scipy_reference():
+    directed_graph = csr_matrix(
+        np.array(
+            [
+                [0.0, 5.0, 0.0, 0.0],
+                [2.0, 0.0, 3.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+            ]
+        )
+    )
+
+    symmetric_graph = symmetrize_distance_graph(
+        directed_graph
+    )
+
+    source_indices = np.array([0, 0, 2, 0])
+    target_indices = np.array([1, 2, 0, 3])
+
+    unique_sources, source_inverse = np.unique(
+        source_indices,
+        return_inverse=True,
+    )
+
+    shortest_paths = dijkstra(
+        symmetric_graph,
+        directed=False,
+        indices=unique_sources,
+        return_predecessors=False,
+    )
+
+    scipy_distances = shortest_paths[
+        source_inverse,
+        target_indices,
+    ]
+
+    networkx_distances = calculate_geodesic_distances(
+        graph=symmetric_graph,
+        source_indices=source_indices,
+        target_indices=target_indices,
+    )
+
+    expected = np.array(
+        [2.0, 5.0, 5.0, np.inf]
+    )
+
+    np.testing.assert_allclose(
+        scipy_distances,
+        expected,
+    )
+
+    np.testing.assert_allclose(
+        networkx_distances,
+        expected,
+    )
+
+    np.testing.assert_allclose(
+        scipy_distances,
+        networkx_distances,
+    )
 
 def test_symmetrize_distance_graph_keeps_single_direction_edges():
     graph = csr_matrix(

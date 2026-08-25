@@ -27,6 +27,7 @@ bioconductor-cellmixs = "*"
 bioconductor-rhdf5 = "*"
 r-yaml = "*"
 r-mlmetrics = "*"
+networkx = ">=3.6.1,<4"
 
 [pypi-dependencies]
 # not on conda-forge/bioconda (checked via anaconda.org); pip-resolves its own
