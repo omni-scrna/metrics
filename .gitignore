@@ -1,2 +1,5 @@
 .DS_Store
 .pixi
+results/
+__pycache__/
+*.pyc
