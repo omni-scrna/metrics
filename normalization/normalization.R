@@ -1,8 +1,10 @@
 #!/usr/bin/env Rscript
 # Normalization metric for omnibenchmark.
 #
-# Measures the influence of size factors on a PCA embedding using canonical
+# Measures the influence of size factors on an embedding using canonical
 # correlation. Smaller values indicate less sequencing-depth confounding.
+# Embedding columns are taken positionally, so any producer's dimension
+# naming (PC*, dim_*) works.
 
 suppressPackageStartupMessages({
   library(jsonlite)
@@ -13,7 +15,7 @@ suppressPackageStartupMessages({
 source("src/common/cli.R")
 p <- arg_parser("NORM-M module")
 p <- add_base_args(p)                    # --output_dir, --name
-p <- add_stage_args(p, "NORM-M")         # --pcas_tsv, --size_factor_tsv
+p <- add_stage_args(p, "NORM-M")         # --embedding_tsv, --size_factor_tsv
 args <- parse_args(p)
 
 # logging
@@ -26,7 +28,7 @@ cat(sprintf("----------------------------------\n"))
 
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-pca <- fread(args$pcas_tsv, header = TRUE)
+pca <- fread(args$embedding_tsv, header = TRUE)
 size_factors <- fread(args$size_factor_tsv, header = TRUE)
 
 # Align size factors to the PCA row order by cell_id.

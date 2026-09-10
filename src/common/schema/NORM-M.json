@@ -1,9 +1,9 @@
 {
   "stage": "NORM-M",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [
-    { "flag": "--pcas_tsv", "type": "path", "help": "PCA embedding TSV (cell_id, principal components)" },
+    { "flag": "--embedding_tsv", "type": "path", "help": "Embedding TSV (cell_id, embedding dimensions)" },
     { "flag": "--size_factor_tsv", "type": "path", "help": "TSV of size factors (cell_id, size_factor)" }
   ]
 }
