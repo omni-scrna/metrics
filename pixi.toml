@@ -1,7 +1,7 @@
 [workspace]
-channels = ["conda-forge", "bioconda"]
+channels = ["conda-forge", "bioconda", "https://repo.prefix.dev/almost-conductor"]
 name = "metrics"
-platforms = ["linux-64"]
+platforms = ["linux-64", "osx-arm64"]
 version = "0.1.1"
 
 [tasks]
@@ -31,3 +31,14 @@ r-mlmetrics = "*"
 # not on conda-forge/bioconda (checked via anaconda.org); pip-resolves its own
 # jax/jaxlib/scanpy/anndata/pynndescent transitive deps.
 scib-metrics = "*"
+
+[feature.dev.dependencies]
+python = ">=3.11"
+pyyaml = ">=6"
+curl = "*"
+
+[feature.dev.tasks]
+sync = "sh -c 'curl -fsSL https://raw.githubusercontent.com/omni-scrna/boilerplate/${BRANCH:-main}/scripts/pull.py | python -'"
+
+[environments]
+dev = { features = ["dev"], no-default-feature = true }

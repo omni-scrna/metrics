@@ -44,7 +44,7 @@ cat(sprintf("----------------------------------\n"))
 
 dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
-pca <- fread(args$pcas_tsv, header = TRUE)
+pca <- fread(args$embedding_tsv, header = TRUE)
 truth <- fread(args$rawdata_clusters_truth, header = TRUE)
 
 # Align embedding rows with truth labels by cell_id.
