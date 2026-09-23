@@ -12,7 +12,7 @@
 #   same source harmony.R (the INTG8 method stage) itself reads for batch correction.
 # - ldf_diff_mean: CellMixS's ldfDiff, a local-structure-distortion metric — compares each
 #   cell's local density factor (LDF) before vs. after integration. Needs a *second*,
-#   pre-integration embedding (pcas_tsv, the PCA stage's joint pre-correction PCA) split per
+#   pre-integration embedding (embedding_tsv, the joint pre-correction embedding) split per
 #   batch, plus the corrected embedding as the "after" side.
 # - CellMixS's locStructure/mixMetric remain out of scope: locStructure's `dim_red` argument is
 #   dead code in the installed version (it always recomputes a fresh per-batch PCA from a raw
@@ -61,7 +61,7 @@ dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
 corrected <- fread(args$corrected_tsv, header = TRUE)
 truth <- fread(args$rawdata_clusters_truth, header = TRUE)
-pcas <- fread(args$pcas_tsv, header = TRUE)
+pcas <- fread(args$embedding_tsv, header = TRUE)
 
 # Align the corrected embedding rows with truth labels by cell_id.
 idx <- match(corrected$cell_id, truth$cell_id)

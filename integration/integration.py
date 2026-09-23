@@ -5,7 +5,7 @@
 #   cell_id), not batch labels. clisi's n_neighbors=90 matches scib-metrics' own
 #   Benchmarker default for LISI-family metrics.
 # - pcr (pcr_comparison) compares batch-covariate variance explained pre- vs.
-#   post-integration: needs a *second*, pre-integration embedding (--pcas_tsv) plus
+#   post-integration: needs a *second*, pre-integration embedding (--embedding_tsv) plus
 #   per-cell batch labels from --rawdata_h5ad's obs/<batch_var> (named via
 #   --properties_info), row-aligned with the corrected embedding rather than grouped per
 #   batch. categorical=True since batch labels are strings.
@@ -44,7 +44,7 @@ def parse_args():
     # hand-rolled below, so the whole CLI stays visible here.
     p = argparse.ArgumentParser(description="INTG8-M module (scib-metrics-backed)")
     cli.add_base_args(p)              # --output_dir, --name
-    cli.add_stage_args(p, "INTG8-M")  # --corrected_tsv, --rawdata_clusters_truth, --rawdata_h5ad, --properties_info, --pcas_tsv, --clusters_corrected_tsv
+    cli.add_stage_args(p, "INTG8-M")  # --corrected_tsv, --rawdata_clusters_truth, --rawdata_h5ad, --properties_info, --embedding_tsv, --clusters_corrected_tsv
     p.add_argument("--n_neighbors", type=int, default=90,
                    help="Neighborhood size (knn) for the graph clisi_knn is computed over")
     p.add_argument("--random_state", type=int, default=0,
@@ -65,7 +65,7 @@ def main() -> None:
     # why instead of just stopping silently. Full invocation first, for reproducibility.
     log(f"args: corrected_tsv={args.corrected_tsv} rawdata_clusters_truth={args.rawdata_clusters_truth} "
         f"rawdata_h5ad={args.rawdata_h5ad} properties_info={args.properties_info} "
-        f"pcas_tsv={args.pcas_tsv} clusters_corrected_tsv={args.clusters_corrected_tsv} "
+        f"embedding_tsv={args.embedding_tsv} clusters_corrected_tsv={args.clusters_corrected_tsv} "
         f"n_neighbors={args.n_neighbors} random_state={args.random_state}")
 
     try:
@@ -128,7 +128,7 @@ def main() -> None:
                 h5_batch_vals = f[f"obs/{batch_var}"].asstr()[:]
             batch_df = pl.DataFrame({"cell_id": h5_cell_ids, "batch": h5_batch_vals})
 
-        pcas_df = pl.read_csv(args.pcas_tsv, separator="\t")
+        pcas_df = pl.read_csv(args.embedding_tsv, separator="\t")
         pre_cols = [c for c in pcas_df.columns if c != "cell_id"]
         pcas_renamed = pcas_df.rename({c: f"pre__{c}" for c in pre_cols})
 

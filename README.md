@@ -13,11 +13,19 @@ Metrics module for the [omni-scrna](https://github.com/omni-scrna) OmniBenchmark
 | `embedding-py` | Python (sklearn) | PCA embedding TSV | silhouette, Davies-Bouldin, Calinski-Harabasz |
 | `embedding-r` | R (poem) | PCA embedding TSV | meanSW, meanClassSW, pnSW, minClassSW, CDbW, cohesion, compactness, sep, DBCV |
 | `graph-r` | R (poem) | KNN neighbor graph (HDF5) | SI, ISI, NP, AMSP, PWC, NCE, adhesion, cohesion |
+| `normalization-r` | R (stats) | PCA embedding TSV and size factors TSV | canonical correlation |
 
 Each entrypoint takes a benchmark stage's method output (a cluster assignment, predicted
 cell-type annotation, batch-corrected embedding, PCA embedding, or KNN neighbor graph) plus a
 ground-truth cell-type labels TSV, aligns rows by `cell_id`, computes its fixed metric suite,
 and writes one JSON scores file (`<name>_<stage>_metrics.json`) to `--output_dir`.
+
+`normalization-r` measures sequencing-depth confounding in an embedding. It aligns
+the PCA embedding and size factors by `cell_id`, uses the first 10 dimensions or all
+available dimensions when fewer than 10 are present, and reports the first canonical
+correlation from `stats::cancor()`. Lower values indicate less association between
+the embedding and library-size-derived size factors. The output also records the
+number of dimensions and cells used.
 
 `cluster-r` and `annotation-r` both compare predicted vs. true cell-type labels, but as
 different kinds of problem: `cluster-r` treats it as a clustering/partition comparison (poem's

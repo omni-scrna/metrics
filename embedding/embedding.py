@@ -21,7 +21,7 @@ def parse_args():
     # hand-rolled below, so the whole CLI stays visible here.
     p = argparse.ArgumentParser(description="EMBED-M module (scanpy-backed)")
     cli.add_base_args(p)              # --output_dir, --name
-    cli.add_stage_args(p, "EMBED-M")  # --pcas_tsv, --rawdata_clusters_truth
+    cli.add_stage_args(p, "EMBED-M")  # --embedding_tsv, --rawdata_clusters_truth
     return p.parse_args()
 
 
@@ -45,10 +45,10 @@ def main() -> None:
     # logging
     print(f"Output directory: {args.output_dir}") 
     print(f"Module name: {args.name}")
-    print(f"pcas_tsv: {args.pcas_tsv}")
+    print(f"embedding_tsv: {args.embedding_tsv}")
     print(f"rawdata_clusters_truth: {args.rawdata_clusters_truth}")
 
-    pca_df = pl.read_csv(args.pcas_tsv, separator="\t")
+    pca_df = pl.read_csv(args.embedding_tsv, separator="\t")
     truth_df = pl.read_csv(args.rawdata_clusters_truth, separator="\t")
 
     # Align embedding rows with truth labels by cell_id.
