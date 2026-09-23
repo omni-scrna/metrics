@@ -13,7 +13,6 @@ from geometry.geometry import (
     read_gene_representation,
     sample_cell_pairs,
     align_representations,
-    symmetrize_distance_graph,
 )
 
 
@@ -97,15 +96,15 @@ def test_align_representations_uses_graph_cell_order():
         )
     )
 
-    pca_df = pl.DataFrame(
+    embedding_df = pl.DataFrame(
         {
             "cell_id": [
                 "cell_c",
                 "cell_a",
                 "cell_b",
             ],
-            "PC1": [300.0, 100.0, 200.0],
-            "PC2": [30.0, 10.0, 20.0],
+            "dim_1": [300.0, 100.0, 200.0],
+            "dim_2": [30.0, 10.0, 20.0],
         }
     )
 
@@ -115,11 +114,11 @@ def test_align_representations_uses_graph_cell_order():
         "cell_c",
     ]
 
-    aligned_gene, aligned_pca, pca_columns = (
+    aligned_gene, aligned_embedding, embedding_columns = (
         align_representations(
             gene_cell_ids=gene_cell_ids,
             gene_matrix=gene_matrix,
-            pca_df=pca_df,
+            embedding_df=embedding_df,
             graph_cell_ids=graph_cell_ids,
         )
     )
@@ -132,7 +131,7 @@ def test_align_representations_uses_graph_cell_order():
         ]
     )
 
-    expected_pca = np.array(
+    expected_embedding = np.array(
         [
             [100.0, 10.0],
             [200.0, 20.0],
@@ -146,11 +145,11 @@ def test_align_representations_uses_graph_cell_order():
     )
 
     np.testing.assert_allclose(
-        aligned_pca,
-        expected_pca,
+        aligned_embedding,
+        expected_embedding,
     )
 
-    assert pca_columns == ["PC1", "PC2"]
+    assert embedding_columns == ["dim_1", "dim_2"]
 
 def test_align_representations_rejects_mismatched_cell_sets():
     gene_cell_ids = [
@@ -163,14 +162,14 @@ def test_align_representations_rejects_mismatched_cell_sets():
         np.eye(3)
     )
 
-    pca_df = pl.DataFrame(
+    embedding_df = pl.DataFrame(
         {
             "cell_id": [
                 "cell_a",
                 "cell_b",
                 "cell_c",
             ],
-            "PC1": [1.0, 2.0, 3.0],
+            "dim_1": [1.0, 2.0, 3.0],
         }
     )
 
@@ -187,7 +186,7 @@ def test_align_representations_rejects_mismatched_cell_sets():
         align_representations(
             gene_cell_ids=gene_cell_ids,
             gene_matrix=gene_matrix,
-            pca_df=pca_df,
+            embedding_df=embedding_df,
             graph_cell_ids=graph_cell_ids,
         )
 
@@ -202,7 +201,7 @@ def test_align_representations_rejects_duplicate_cell_ids():
         np.eye(3)
     )
 
-    pca_df = pl.DataFrame(
+    embedding_df = pl.DataFrame(
         {
             "cell_id": [
                 "cell_a",
@@ -226,24 +225,20 @@ def test_align_representations_rejects_duplicate_cell_ids():
         align_representations(
             gene_cell_ids=gene_cell_ids,
             gene_matrix=gene_matrix,
-            pca_df=pca_df,
+            embedding_df=embedding_df,
             graph_cell_ids=graph_cell_ids,
         )
 
 def test_networkx_geodesic_matches_scipy_reference():
-    directed_graph = csr_matrix(
+    graph = csr_matrix(
         np.array(
             [
-                [0.0, 5.0, 0.0, 0.0],
-                [2.0, 0.0, 3.0, 0.0],
+                [0.0, 2.0, 0.0, 0.0],
+                [0.0, 0.0, 3.0, 0.0],
                 [0.0, 0.0, 0.0, 0.0],
                 [0.0, 0.0, 0.0, 0.0],
             ]
         )
-    )
-
-    symmetric_graph = symmetrize_distance_graph(
-        directed_graph
     )
 
     source_indices = np.array([0, 0, 2, 0])
@@ -255,7 +250,7 @@ def test_networkx_geodesic_matches_scipy_reference():
     )
 
     shortest_paths = dijkstra(
-        symmetric_graph,
+        graph,
         directed=False,
         indices=unique_sources,
         return_predecessors=False,
@@ -267,7 +262,7 @@ def test_networkx_geodesic_matches_scipy_reference():
     ]
 
     networkx_distances = calculate_geodesic_distances(
-        graph=symmetric_graph,
+        graph=graph,
         source_indices=source_indices,
         target_indices=target_indices,
     )
@@ -290,8 +285,7 @@ def test_networkx_geodesic_matches_scipy_reference():
         scipy_distances,
         networkx_distances,
     )
-
-def test_symmetrize_distance_graph_keeps_single_direction_edges():
+def test_geodesic_treats_single_direction_knn_edges_as_undirected():
     graph = csr_matrix(
         np.array(
             [
@@ -302,41 +296,43 @@ def test_symmetrize_distance_graph_keeps_single_direction_edges():
         )
     )
 
-    symmetric = symmetrize_distance_graph(graph).toarray()
+    source_indices = np.array([0, 2])
+    target_indices = np.array([2, 0])
 
-    expected = np.array(
-        [
-            [0.0, 2.0, 0.0],
-            [2.0, 0.0, 3.0],
-            [0.0, 3.0, 0.0],
-        ]
+    distances = calculate_geodesic_distances(
+        graph=graph,
+        source_indices=source_indices,
+        target_indices=target_indices,
     )
 
-    np.testing.assert_allclose(symmetric, expected)
-
-
-def test_symmetrize_distance_graph_uses_smaller_bidirectional_distance():
+    np.testing.assert_allclose(
+        distances,
+        np.array([5.0, 5.0]),
+    )
+def test_geodesic_preserves_explicit_zero_distance_edge():
     graph = csr_matrix(
-        np.array(
-            [
-                [0.0, 5.0],
-                [2.0, 0.0],
-            ]
-        )
+        (
+            np.array([0.0, 2.0]),
+            (
+                np.array([0, 1]),
+                np.array([1, 2]),
+            ),
+        ),
+        shape=(3, 3),
     )
 
-    symmetric = symmetrize_distance_graph(graph).toarray()
+    assert graph.nnz == 2
 
-    expected = np.array(
-        [
-            [0.0, 2.0],
-            [2.0, 0.0],
-        ]
+    distances = calculate_geodesic_distances(
+        graph=graph,
+        source_indices=np.array([0]),
+        target_indices=np.array([2]),
     )
 
-    np.testing.assert_allclose(symmetric, expected)
-
-
+    np.testing.assert_allclose(
+        distances,
+        np.array([2.0]),
+    )
 def test_disconnected_pair_fraction_connected_graph():
     graph = csr_matrix(
         np.array(
