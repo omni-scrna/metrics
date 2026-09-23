@@ -1,0 +1,8 @@
+{
+  "stage": "NNG-C",
+  "version": "0.1.0",
+  "benchmark": "omni-scrna/split-stages-plan",
+  "args": [
+    { "flag": "--corrected_tsv", "type": "path", "help": "Batch-corrected embedding TSV (cell_ids as rownames)" }
+  ]
+}

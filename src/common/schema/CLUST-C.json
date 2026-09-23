@@ -1,0 +1,8 @@
+{
+  "stage": "CLUST-C",
+  "version": "0.1.0",
+  "benchmark": "omni-scrna/split-stages-plan",
+  "args": [
+    { "flag": "--neighbors_corrected_h5", "type": "path", "help": "H5 file with neighbors (corrected embedding)" }
+  ]
+}

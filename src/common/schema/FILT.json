@@ -1,0 +1,9 @@
+{
+  "stage": "FILT",
+  "version": "0.1.1",
+  "benchmark": "omni-scrna/split-stages-plan",
+  "args": [
+    { "flag": "--properties_info", "type": "path", "help": "JSON file with relevant column names" },
+    { "flag": "--rawdata_h5ad", "type": "path", "help": "rawdata H5AD file" }
+  ]
+}
