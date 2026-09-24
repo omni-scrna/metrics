@@ -13,24 +13,12 @@
       "commit": "4ed2aec2c538acd45f572a4bffd255a50e1afb73",
       "files": [
         "ANNO-M",
-        "ANNO",
-        "CLUST-C",
-        "CLUST-E",
         "CLUST-M",
-        "CLUST",
         "EMBED-M",
-        "FEAT",
-        "FILT",
         "GEOM-M",
         "GRAPH-M",
         "INTG8-M",
-        "INTG8",
-        "ISOMAP",
-        "NNG-C",
-        "NNG",
         "NORM-M",
-        "NORM",
-        "PCA",
         "_base"
       ]
     }
