@@ -5,6 +5,7 @@ import polars as pl
 from scipy.sparse import csc_matrix, csr_matrix
 from scipy.sparse.csgraph import dijkstra
 from geometry.geometry import (
+    build_sampled_pairs_table,
     calculate_sampled_distances,
     calculate_euclidean_distances,
     calculate_geodesic_distances,
@@ -602,4 +603,81 @@ def test_compare_distances_rejects_mismatched_lengths():
         compare_distances(
             reference_distances=reference,
             comparison_distances=comparison,
+        )
+
+def test_build_sampled_pairs_table_preserves_cell_ids_and_distances():
+    cell_ids = [
+        "cell_a",
+        "cell_b",
+        "cell_c",
+    ]
+
+    source_indices = np.array([2, 0])
+    target_indices = np.array([1, 2])
+
+    gene_distances = np.array([1.5, 2.5])
+    embedding_distances = np.array([1.0, 2.0])
+    geodesic_distances = np.array([np.inf, 3.0])
+
+    table = build_sampled_pairs_table(
+        cell_ids=cell_ids,
+        source_indices=source_indices,
+        target_indices=target_indices,
+        gene_distances=gene_distances,
+        embedding_distances=embedding_distances,
+        geodesic_distances=geodesic_distances,
+    )
+
+    assert table.columns == [
+        "cell_id_1",
+        "cell_id_2",
+        "gene_euclidean_distance",
+        "embedding_euclidean_distance",
+        "geodesic_distance",
+        "geodesic_is_finite",
+    ]
+
+    assert table["cell_id_1"].to_list() == [
+        "cell_c",
+        "cell_a",
+    ]
+
+    assert table["cell_id_2"].to_list() == [
+        "cell_b",
+        "cell_c",
+    ]
+
+    np.testing.assert_allclose(
+        table["gene_euclidean_distance"].to_numpy(),
+        gene_distances,
+    )
+
+    np.testing.assert_allclose(
+        table["embedding_euclidean_distance"].to_numpy(),
+        embedding_distances,
+    )
+
+    assert table["geodesic_distance"].to_list() == [
+        np.inf,
+        3.0,
+    ]
+
+    assert table["geodesic_is_finite"].to_list() == [
+        False,
+        True,
+    ]
+
+
+def test_build_sampled_pairs_table_rejects_mismatched_lengths():
+    with pytest.raises(
+        ValueError,
+        match="gene_distances must have the same length as source_indices",
+    ):
+        build_sampled_pairs_table(
+            cell_ids=["cell_a", "cell_b", "cell_c"],
+            source_indices=np.array([0, 1]),
+            target_indices=np.array([1, 2]),
+            gene_distances=np.array([1.0]),
+            embedding_distances=np.array([1.0, 2.0]),
+            geodesic_distances=np.array([1.0, 2.0]),
         )

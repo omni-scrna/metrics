@@ -344,7 +344,52 @@ def calculate_sampled_distances(
     )
 
     return euclidean_distances, geodesic_distances
+def build_sampled_pairs_table(
+    cell_ids: list[str],
+    source_indices: np.ndarray,
+    target_indices: np.ndarray,
+    gene_distances: np.ndarray,
+    embedding_distances: np.ndarray,
+    geodesic_distances: np.ndarray,
+) -> pl.DataFrame:
+    """Build a pair-level table for the sampled cell pairs."""
+    n_pairs = len(source_indices)
 
+    arrays = {
+        "target_indices": target_indices,
+        "gene_distances": gene_distances,
+        "embedding_distances": embedding_distances,
+        "geodesic_distances": geodesic_distances,
+    }
+
+    for name, values in arrays.items():
+        if len(values) != n_pairs:
+            raise ValueError(
+                f"{name} must have the same length as source_indices."
+            )
+
+    source_cell_ids = [
+        cell_ids[int(index)]
+        for index in source_indices
+    ]
+
+    target_cell_ids = [
+        cell_ids[int(index)]
+        for index in target_indices
+    ]
+
+    return pl.DataFrame(
+        {
+            "cell_id_1": source_cell_ids,
+            "cell_id_2": target_cell_ids,
+            "gene_euclidean_distance": gene_distances,
+            "embedding_euclidean_distance": embedding_distances,
+            "geodesic_distance": geodesic_distances,
+            "geodesic_is_finite": np.isfinite(
+                geodesic_distances
+            ),
+        }
+    )
 def compare_distances(
     reference_distances: np.ndarray,
     comparison_distances: np.ndarray,
@@ -570,7 +615,14 @@ def main() -> None:
         reference_distances=embedding_distances,
         comparison_distances=geodesic_distances,
     )
-
+    sampled_pairs_table = build_sampled_pairs_table(
+        cell_ids=graph_cell_ids,
+        source_indices=source_indices,
+        target_indices=target_indices,
+        gene_distances=gene_distances,
+        embedding_distances=embedding_distances,
+        geodesic_distances=geodesic_distances,
+    )
     output_dir = Path(args.output_dir)
     output_dir.mkdir(
         parents=True,
@@ -581,7 +633,16 @@ def main() -> None:
         output_dir
         / f"{args.name}_geometry_metrics.json"
     )
+    pairs_output_path = (
+        output_dir
+        / f"{args.name}_geometry_pair_summary.tsv"
+    )
+    sampled_pairs_table.write_csv(
+        pairs_output_path,
+        separator="\t",
+    )
 
+    log(f"wrote sampled pairs to {pairs_output_path}")
     result = {
         "n_gene_cells": n_gene_cells,
         "n_embedding_cells": n_embedding_cells,
