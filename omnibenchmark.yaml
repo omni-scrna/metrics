@@ -9,6 +9,7 @@ entrypoints:
   annotation-r: annotation/annotation.R
   integration-r: integration/integration.R
   integration-py: integration/integration.py
+  geometry-py: geometry/geometry.py
 
 templates:
   repo: https://github.com/omni-scrna/boilerplate
@@ -21,4 +22,4 @@ benchmarks:
   - name: split-stages
     repo: https://github.com/omni-scrna/split-stages-plan
     plan: benchmark_conda.yaml
-    ref: embed-gen
+    ref: refactor-geometry-agreement-spec
