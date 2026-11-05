@@ -101,6 +101,29 @@ def test_total_variance_matches_dense(tmp_path):
     assert np.isclose(total_variance(str(tmp_path / "m.h5")), dense.var(axis=1, ddof=1).sum())
 
 
+def test_parallel_analysis_edge_separates_planted_signal():
+    import scipy.sparse as sp
+    from pca_metrics import noise_edge, top_eigenvalue, total_variance
+    rng = np.random.default_rng(4)
+    n_genes, n_cells = 80, 600
+    noise = rng.poisson(0.3, size=(n_genes, n_cells)).astype(float)   # sparse-ish counts
+    groups = rng.integers(0, 3, n_cells)                               # 3 cell groups -> rank 2
+    signal = np.zeros_like(noise)
+    signal[:10, groups == 1] += 2.0
+    signal[10:20, groups == 2] += 2.0
+    x = sp.csr_matrix(noise + signal)
+    xc = x.toarray() - x.toarray().mean(axis=1, keepdims=True)
+    ev = np.linalg.eigvalsh(xc @ xc.T / (n_cells - 1))[::-1]
+    assert np.isclose(top_eigenvalue(x), ev[0])
+    assert np.isclose(total_variance(x), ev.sum())
+    edge = noise_edge(x, n_perm=10, quantile=0.95, seed=0)
+    assert (ev > edge).sum() == 2                                       # exactly the planted structure
+    pure = sp.csr_matrix(noise)
+    pc = pure.toarray() - pure.toarray().mean(axis=1, keepdims=True)
+    ev0 = np.linalg.eigvalsh(pc @ pc.T / (n_cells - 1))[::-1]
+    assert (ev0 > noise_edge(pure, n_perm=10, quantile=0.95, seed=0)).sum() <= 1
+
+
 def _rot(k, theta=0.5):
     r = np.eye(k)
     c, s = np.cos(theta), np.sin(theta)

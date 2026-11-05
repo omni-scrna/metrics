@@ -22,6 +22,11 @@ Output: one long TSV, one row per (member, metric, index):
   var_explained  per PC   var_i / total variance of the FEAT matrix (sum of every
                           gene's variance, not of the kept PCs), when
                           --normalized_selected_h5 is gathered too
+  pa_edge        index 0  parallel-analysis noise edge as a share of total
+                          variance: the --pa_quantile of the top eigenvalue
+                          after shuffling every gene across cells (Horn 1965;
+                          permutation form, Buja & Eyuboglu 1992). PCs above
+                          it carry structure; below it is the noise bulk.
 IPR is unstable inside near-degenerate eigenspaces (where pc_sin rises), and
 means different things under different preprocessing (rare population vs a
 one-gene noise axis), so compare it within one input matrix only.
@@ -38,6 +43,8 @@ from pathlib import Path
 import h5py
 import numpy as np
 import polars as pl
+import scipy.sparse as sp
+from scipy.sparse.linalg import LinearOperator, eigsh
 
 sys.path.insert(0, str(Path(__file__).parent / "../src"))  # vendored `common`
 from common import cli  # noqa: E402
@@ -125,19 +132,60 @@ def pair_members(embeddings, loadings, stage):
     return out
 
 
-def total_variance(h5):
-    """Sum of per-gene variances (ddof=1) of a TENx genes x cells CSC matrix:
-    the trace of the covariance PCA decomposes, without densifying."""
+def read_tenx(h5):
+    """TENx genes x cells CSC matrix as scipy CSR (one row per gene)."""
     with h5py.File(h5, "r") as f:
         g = f["matrix"]
-        n_genes, n_cells = (int(v) for v in g["shape"][:])
-        idx, x = g["indices"][:], g["data"][:].astype(np.float64)
-    s1 = np.bincount(idx, weights=x, minlength=n_genes)
-    s2 = np.bincount(idx, weights=x * x, minlength=n_genes)
-    return float(((s2 - s1 * s1 / n_cells) / (n_cells - 1)).sum())
+        shape = tuple(int(v) for v in g["shape"][:])
+        x = sp.csc_matrix((g["data"][:].astype(np.float64), g["indices"][:], g["indptr"][:]), shape=shape)
+    return x.tocsr()
 
 
-def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrices=()):
+def total_variance(x):
+    """Sum of per-gene variances (ddof=1): the trace of the covariance PCA
+    decomposes, without densifying. `x` is genes x cells CSR, or a TENx path."""
+    if isinstance(x, str):
+        x = read_tenx(x)
+    n = x.shape[1]
+    s1 = np.asarray(x.sum(axis=1)).ravel()
+    s2 = np.asarray(x.multiply(x).sum(axis=1)).ravel()
+    return float(((s2 - s1 * s1 / n) / (n - 1)).sum())
+
+
+def top_eigenvalue(x):
+    """Largest eigenvalue of the gene covariance of genes x cells CSR `x`,
+    centring implicitly: C v = (X (X^T v) - n mu (mu^T v)) / (n - 1)."""
+    n = x.shape[1]
+    mu = np.asarray(x.mean(axis=1)).ravel()
+    xt = x.T.tocsr()
+    op = LinearOperator((x.shape[0],) * 2, dtype=np.float64,
+                        matvec=lambda v: (x @ (xt @ v) - n * mu * (mu @ v)) / (n - 1))
+    return float(eigsh(op, k=1, which="LA", return_eigenvectors=False)[0])
+
+
+def shuffle_genes(x, rng):
+    """Permute every gene independently across cells. For a sparse row that is
+    moving its nonzeros to random distinct cells; per-gene values are kept."""
+    n = x.shape[1]
+    cols = np.empty_like(x.indices)
+    for g in range(x.shape[0]):
+        a, b = x.indptr[g], x.indptr[g + 1]
+        cols[a:b] = rng.choice(n, b - a, replace=False)
+    y = sp.csr_matrix((x.data.copy(), cols, x.indptr.copy()), shape=x.shape)
+    y.sort_indices()
+    return y
+
+
+def noise_edge(x, n_perm, quantile, seed):
+    """Parallel-analysis edge: `quantile` of the top eigenvalue over `n_perm`
+    gene-wise shuffles of `x`."""
+    rng = np.random.default_rng(seed)
+    tops = [top_eigenvalue(shuffle_genes(x, rng)) for _ in range(n_perm)]
+    return float(np.quantile(tops, quantile))
+
+
+def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrices=(),
+        pa_n_perm=20, pa_quantile=0.95, pa_seed=42):
     members = pair_members(embeddings, loadings, stage)
     # FEAT node dir -> its matrix, for the variance-explained denominator
     totals = {str(Path(h).parent): h for h in matrices}
@@ -166,10 +214,16 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
         meta = {s: f"{m}.{h}" for s, (m, h) in lin.items()}
         extra = []
         if key in totals:
-            if isinstance(totals[key], str):
-                totals[key] = total_variance(totals[key])
+            if isinstance(totals[key], str):  # once per FEAT node, then cached
+                x = read_tenx(totals[key])
+                tot = total_variance(x)
+                edge = noise_edge(x, pa_n_perm, pa_quantile, pa_seed) if pa_n_perm > 0 else np.nan
+                totals[key] = (tot, edge)
+                print(f"{key}: total variance {tot:.4g}, PA edge {edge / tot:.4%} of it")
+            tot, edge = totals[key]
             var = emb.var(axis=0, ddof=1)
-            extra = [("var_explained", i + 1, float(v / totals[key])) for i, v in enumerate(var)]
+            extra = [("var_explained", i + 1, float(v / tot)) for i, v in enumerate(var)]
+            extra.append(("pa_edge", 0, float(edge / tot)))
         for metric, idx, value in compare(ref_emb, ref_load, emb, load, ks) + extra:
             rows.append({
                 "dataset": lin.get("DATA", ("", ""))[0],
@@ -192,6 +246,11 @@ def parse_args():
     p.add_argument("--loadings_tsv", nargs="+", required=True, help="every gathered loadings")
     p.add_argument("--normalized_selected_h5", nargs="*", default=[],
                    help="FEAT matrices, for variance explained (optional)")
+    p.add_argument("--pa_n_perm", type=int, default=20,
+                   help="parallel-analysis shuffles per FEAT matrix (0 = skip)")
+    p.add_argument("--pa_quantile", type=float, default=0.95,
+                   help="quantile of the shuffled top eigenvalue taken as the edge")
+    p.add_argument("--random_seed", type=int, default=42, help="seed for the shuffles")
     p.add_argument("--reference_module", default="pc_exact",
                    help="PCA module id taken as the exact reference")
     p.add_argument("--ks", default="5,10,20,30,50",
@@ -203,7 +262,8 @@ def main():
     args = parse_args()
     ks = [int(k) for k in args.ks.split(",")]
     df = run(args.embedding_tsv, args.loadings_tsv, args.reference_module, ks,
-             matrices=args.normalized_selected_h5)
+             matrices=args.normalized_selected_h5, pa_n_perm=args.pa_n_perm,
+             pa_quantile=args.pa_quantile, pa_seed=args.random_seed)
     out = cli.output_path(args, "pca_metrics_tsv", "_pca_metrics.tsv")
     out.parent.mkdir(parents=True, exist_ok=True)
     df.write_csv(out, separator="\t")
