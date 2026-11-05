@@ -23,10 +23,29 @@ Output: one long TSV, one row per (member, metric, index):
                           gene's variance, not of the kept PCs), when
                           --normalized_selected_h5 is gathered too
   pa_edge        index 0  parallel-analysis noise edge as a share of total
-                          variance: the --pa_quantile of the top eigenvalue
-                          after shuffling every gene across cells (Horn 1965;
-                          permutation form, Buja & Eyuboglu 1992). PCs above
-                          it carry structure; below it is the noise bulk.
+                          variance: the --pa_quantile of the TOP eigenvalue
+                          after shuffling every gene across cells. PCs above it
+                          carry structure; below it is the noise bulk.
+                          Edge form, not Horn's i-th vs i-th comparison (that is
+                          PCAtools::parallelPCA); for the first component the
+                          two coincide and equal the Tracy-Widom test.
+
+References
+  Horn JL (1965) A rationale and test for the number of factors in factor
+    analysis. Psychometrika 30:179-185. doi:10.1007/BF02289447
+  Buja A, Eyuboglu N (1992) Remarks on parallel analysis. Multivariate Behav
+    Res 27(4):509-540. doi:10.1207/s15327906mbr2704_2  (permutation form)
+  Glorfeld LW (1995) An improvement on Horn's parallel analysis methodology for
+    selecting the correct number of factors to retain. Educ Psychol Meas
+    55(3):377-393.  (95th percentile instead of the mean/median)
+  Saccenti E, Timmerman ME (2017) Considering Horn's parallel analysis from a
+    random matrix theory point of view. Psychometrika 82:186-209.
+    doi:10.1007/s11336-016-9515-z
+  Single-cell use: PCAtools::parallelPCA (Blighe & Lun, Bioconductor); Lun A,
+    "Choosing the number of PCs for denoising" (CRUK technical report).
+  IPR: Plerou V et al. (2002) Random matrix approach to cross correlations in
+    financial data. Phys Rev E 65:066126. On scRNA-seq, sparsity alone can
+    localise eigenvectors: Aparicio L et al. (2020) Patterns 1(3):100035.
 IPR is unstable inside near-degenerate eigenspaces (where pc_sin rises), and
 means different things under different preprocessing (rare population vs a
 one-gene noise axis), so compare it within one input matrix only.
