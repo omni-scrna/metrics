@@ -118,6 +118,11 @@ def test_parallel_analysis_edge_separates_planted_signal():
     assert np.isclose(total_variance(x), ev.sum())
     edge = noise_edge(x, n_perm=10, quantile=0.95, seed=0)
     assert (ev > edge).sum() == 2                                       # exactly the planted structure
+    from pca_metrics import horn_pvalues, shuffled_spectra, top_eigenvalues
+    assert np.allclose(top_eigenvalues(x, 5), ev[:5])
+    p = horn_pvalues(ev[:10], shuffled_spectra(x, n_perm=19, k=10, seed=0))
+    keep = int(np.argmax(p >= 0.1)) if (p >= 0.1).any() else len(p)       # parallelPCA's rule
+    assert keep == 2
     pure = sp.csr_matrix(noise)
     pc = pure.toarray() - pure.toarray().mean(axis=1, keepdims=True)
     ev0 = np.linalg.eigvalsh(pc @ pc.T / (n_cells - 1))[::-1]

@@ -29,6 +29,10 @@ Output: one long TSV, one row per (member, metric, index):
                           Edge form, not Horn's i-th vs i-th comparison (that is
                           PCAtools::parallelPCA); for the first component the
                           two coincide and equal the Tracy-Widom test.
+  pa_p           per PC   Horn's rule as in PCAtools::parallelPCA: permutation
+                          p-value of PC i against the i-th shuffled eigenvalue,
+                          (1 + #{perm_i >= var_i}) / (n_perm + 1). parallelPCA
+                          keeps the leading PCs with p < 0.1.
 
 References
   Horn JL (1965) A rationale and test for the number of factors in factor
@@ -171,15 +175,19 @@ def total_variance(x):
     return float(((s2 - s1 * s1 / n) / (n - 1)).sum())
 
 
-def top_eigenvalue(x):
-    """Largest eigenvalue of the gene covariance of genes x cells CSR `x`,
-    centring implicitly: C v = (X (X^T v) - n mu (mu^T v)) / (n - 1)."""
+def top_eigenvalues(x, k=1):
+    """Largest k eigenvalues (descending) of the gene covariance of genes x
+    cells CSR `x`, centring implicitly: C v = (X (X^T v) - n mu (mu^T v)) / (n - 1)."""
     n = x.shape[1]
     mu = np.asarray(x.mean(axis=1)).ravel()
     xt = x.T.tocsr()
     op = LinearOperator((x.shape[0],) * 2, dtype=np.float64,
                         matvec=lambda v: (x @ (xt @ v) - n * mu * (mu @ v)) / (n - 1))
-    return float(eigsh(op, k=1, which="LA", return_eigenvectors=False)[0])
+    return np.sort(eigsh(op, k=k, which="LA", return_eigenvectors=False))[::-1]
+
+
+def top_eigenvalue(x):
+    return float(top_eigenvalues(x, 1)[0])
 
 
 def shuffle_genes(x, rng):
@@ -195,12 +203,23 @@ def shuffle_genes(x, rng):
     return y
 
 
+def shuffled_spectra(x, n_perm, k, seed):
+    """n_perm x k: the top k eigenvalues of each gene-wise shuffle of `x`."""
+    rng = np.random.default_rng(seed)
+    return np.array([top_eigenvalues(shuffle_genes(x, rng), k) for _ in range(n_perm)])
+
+
 def noise_edge(x, n_perm, quantile, seed):
     """Parallel-analysis edge: `quantile` of the top eigenvalue over `n_perm`
     gene-wise shuffles of `x`."""
-    rng = np.random.default_rng(seed)
-    tops = [top_eigenvalue(shuffle_genes(x, rng)) for _ in range(n_perm)]
-    return float(np.quantile(tops, quantile))
+    return float(np.quantile(shuffled_spectra(x, n_perm, 1, seed)[:, 0], quantile))
+
+
+def horn_pvalues(var, perm):
+    """Per-PC permutation p-values of observed eigenvalues `var` against the
+    i-th shuffled eigenvalues `perm` (n_perm x k), as PCAtools::parallelPCA."""
+    k = min(len(var), perm.shape[1])
+    return (1 + (perm[:, :k] >= var[:k]).sum(axis=0)) / (perm.shape[0] + 1)
 
 
 def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrices=(),
@@ -236,13 +255,17 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
             if isinstance(totals[key], str):  # once per FEAT node, then cached
                 x = read_tenx(totals[key])
                 tot = total_variance(x)
-                edge = noise_edge(x, pa_n_perm, pa_quantile, pa_seed) if pa_n_perm > 0 else np.nan
-                totals[key] = (tot, edge)
+                perm = (shuffled_spectra(x, pa_n_perm, ref_emb.shape[1], pa_seed)
+                        if pa_n_perm > 0 else None)
+                edge = float(np.quantile(perm[:, 0], pa_quantile)) if perm is not None else np.nan
+                totals[key] = (tot, edge, perm)
                 print(f"{key}: total variance {tot:.4g}, PA edge {edge / tot:.4%} of it")
-            tot, edge = totals[key]
+            tot, edge, perm = totals[key]
             var = emb.var(axis=0, ddof=1)
             extra = [("var_explained", i + 1, float(v / tot)) for i, v in enumerate(var)]
             extra.append(("pa_edge", 0, float(edge / tot)))
+            if perm is not None:
+                extra += [("pa_p", i + 1, float(p)) for i, p in enumerate(horn_pvalues(var, perm))]
         for metric, idx, value in compare(ref_emb, ref_load, emb, load, ks) + extra:
             rows.append({
                 "dataset": lin.get("DATA", ("", ""))[0],

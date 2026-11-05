@@ -22,7 +22,8 @@ all[, basis := fifelse(grepl("nmf", pca), "NMF", "PCA")]
 loc <- all[metric %in% c("ipr", "ipr_floor")]
 ve <- all[metric == "var_explained"]
 pa <- unique(all[metric == "pa_edge" & is_reference == TRUE, .(NORM, FEAT, input, edge = 100 * value)])
-m <- all[is_reference == FALSE & !metric %in% c("ipr", "ipr_floor", "var_explained", "pa_edge")]
+pap <- all[metric == "pa_p" & is_reference == TRUE]
+m <- all[is_reference == FALSE & !metric %in% c("ipr", "ipr_floor", "var_explained", "pa_edge", "pa_p")]
 # log axes: exact agreement is 0, show it at the double-precision floor
 floor_ <- 1e-16
 m[, shown := pmax(value, floor_)]
@@ -57,7 +58,7 @@ knitr::kable(s, align = "l")
 `pc_exact`, % of the matrix's total variance. Dotted: elbow
 (`PCAtools::findElbowPoint`). Red dashed: parallel-analysis noise edge (genes
 shuffled across cells, 95th pct of the top eigenvalue; Horn 1965). PCs below
-it are noise.
+it are noise. "parallelPCA rule": Horn's i-th vs i-th comparison, p < 0.1.
 
 ```{r}
 if (nrow(ve) == 0) {
@@ -71,6 +72,10 @@ if (nrow(ve) == 0) {
   tab <- merge(elb, ref[, .(`% PC1` = pct[PC == 1], `cum % 10 PCs` = cum[PC == 10],
                             `cum % 50 PCs` = cum[PC == max(PC)]), by = input], by = "input")
   tab <- merge(tab, above, by = "input", all.x = TRUE)
+  # parallelPCA's rule: leading PCs with p < 0.1 against the i-th shuffled eigenvalue
+  horn <- pap[order(index), .(`PCs (parallelPCA rule)` = {
+    f <- which(value >= 0.1); if (length(f)) f[1] - 1L else .N }), by = input]
+  tab <- merge(tab, horn, by = "input", all.x = TRUE)
   knitr::kable(tab[, !"input"], digits = 1)
 }
 ```
