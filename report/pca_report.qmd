@@ -1,0 +1,90 @@
+---
+title: "PCA accuracy against the exact reference"
+format:
+  html:
+    embed-resources: true
+    toc: true
+execute:
+  echo: false
+  warning: false
+---
+
+```{r}
+library(data.table)
+library(ggplot2)
+files <- readLines("inputs.txt")
+m <- rbindlist(lapply(files, fread), fill = TRUE)
+m <- m[is_reference == FALSE]
+m[, input := paste(norm, feat, sep = " / ")]
+# log axes: exact agreement is 0, show it at the double-precision floor
+floor_ <- 1e-16
+m[, shown := pmax(value, floor_)]
+```
+
+Every PCA arm is compared with `pc_exact` (scanpy, dense LAPACK SVD, float64)
+computed on **the same** `normalized_selected` matrix: same dataset, NORM and
+FEAT branch. Sines come from projection residuals, so values down to ~1e-15
+are real. NMF factors are neither orthogonal nor ordered by variance: read only
+their subspace rows.
+
+`r m[, uniqueN(pca)]` PCA modules, `r m[, uniqueN(input)]` input matrices,
+`r m[, uniqueN(dataset)]` dataset(s), from `r length(files)` metric table(s).
+
+## Summary
+
+```{r}
+s <- m[, .(
+  `max pc_sin, PC1-10` = max(value[metric == "pc_sin" & index <= 10]),
+  `subspace_sin k=10` = value[metric == "subspace_sin" & index == 10][1],
+  `subspace_sin k=50` = value[metric == "subspace_sin" & index == 50][1],
+  `max eig_rel_err, PC1-10` = max(value[metric == "eig_rel_err" & index <= 10])
+), by = .(dataset, pca, pca_params, input)]
+setorder(s, dataset, pca, input)
+knitr::kable(s, digits = 3, format.args = list(scientific = TRUE))
+```
+
+## Per-PC loading error
+
+sin(angle) between each PC's loading vector and the reference's. Rising error
+at high PCs is expected where the eigengap closes (PCs below the noise edge).
+
+```{r}
+#| fig-height: 7
+ggplot(m[metric == "pc_sin"], aes(index, shown, colour = pca, group = interaction(pca, pca_params))) +
+  geom_line() +
+  scale_y_log10() +
+  facet_wrap(~input) +
+  labs(x = "PC", y = "sin(angle) to reference", colour = "PCA module") +
+  theme_bw()
+```
+
+## Leading-subspace error
+
+Largest principal-angle sine between the leading k loadings (solid) and cell
+scores (dashed) of each arm and the reference.
+
+```{r}
+#| fig-height: 7
+sub <- m[metric %in% c("subspace_sin", "scores_sin")]
+ggplot(sub, aes(index, shown, colour = pca, linetype = metric,
+                group = interaction(pca, pca_params, metric))) +
+  geom_line() + geom_point(size = 0.8) +
+  scale_y_log10() +
+  facet_wrap(~input) +
+  labs(x = "k (leading PCs)", y = "max sin(principal angle)", colour = "PCA module") +
+  theme_bw()
+```
+
+## Eigenvalue error
+
+Relative error of each PC's score variance against the reference eigenvalue.
+
+```{r}
+#| fig-height: 7
+ggplot(m[metric == "eig_rel_err"], aes(index, shown, colour = pca, group = interaction(pca, pca_params))) +
+  geom_line() +
+  scale_y_log10() +
+  facet_wrap(~input) +
+  labs(x = "PC", y = "relative eigenvalue error", colour = "PCA module") +
+  theme_bw()
+```
