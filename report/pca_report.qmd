@@ -13,17 +13,19 @@ execute:
 library(data.table)
 library(ggplot2)
 files <- readLines("inputs.txt")
-m <- rbindlist(lapply(files, fread), fill = TRUE)
-m <- m[is_reference == FALSE]
-m[, input := paste(norm, feat, sep = " / ")]
+all <- rbindlist(lapply(files, fread), fill = TRUE)
+all[, input := paste(norm, feat, sep = " / ")]
 # facet labels: module ids without the parameter hash
-m[, NORM := sub("\\..*$", "", norm)][, FEAT := sub("\\..*$", "", feat)]
+all[, NORM := sub("\\..*$", "", norm)][, FEAT := sub("\\..*$", "", feat)]
+all[, basis := fifelse(grepl("nmf", pca), "NMF", "PCA")]
+# localisation rows are per arm, the reference included; accuracy rows exclude it
+loc <- all[metric %in% c("ipr", "ipr_floor")]
+m <- all[is_reference == FALSE & !metric %in% c("ipr", "ipr_floor")]
 # log axes: exact agreement is 0, show it at the double-precision floor
 floor_ <- 1e-16
 m[, shown := pmax(value, floor_)]
 # NMF is not a PCA basis (not orthogonal, not variance-ordered): per-PC and
 # eigenvalue rows compare unrelated factors, so those plots leave it out
-m[, basis := fifelse(grepl("nmf", pca), "NMF", "PCA")]
 sci <- function(x) formatC(x, format = "e", digits = 1)
 ```
 
@@ -97,5 +99,30 @@ ggplot(m[metric == "eig_rel_err" & basis == "PCA"], aes(index, shown, colour = p
   scale_y_log10() +
   facet_grid(NORM ~ FEAT) +
   labs(x = "PC", y = "relative eigenvalue error", colour = "PCA module") +
+  theme_bw()
+```
+
+## Loading localisation (IPR)
+
+Effective number of genes per factor, 1/IPR with IPR = sum l^4 / (sum l^2)^2.
+Gene g carries lambda_i * l_g^2 of eigenvalue i, so a low value means that
+PC's variance sits on few genes. Dashed: a random unit vector (n_genes / 3).
+Arms that match the reference overlap it; IPR is unstable where PCs are
+near-degenerate, and in log-normalised data a very localised PC is often a
+single-gene noise axis rather than a rare population, so read it within a
+panel, not across NORM branches.
+
+```{r}
+#| fig-height: 8
+#| fig-width: 11
+eff <- loc[metric == "ipr", .(PC = index, eff_genes = 1 / value, pca, pca_params, is_reference, NORM, FEAT)]
+fl <- unique(loc[metric == "ipr_floor", .(NORM, FEAT, eff_floor = 1 / value)])
+ggplot(eff, aes(PC, eff_genes, colour = pca, group = interaction(pca, pca_params))) +
+  geom_line(aes(linewidth = is_reference)) +
+  scale_linewidth_manual(values = c(`TRUE` = 1.2, `FALSE` = 0.4), guide = "none") +
+  geom_hline(data = fl, aes(yintercept = eff_floor), linetype = "dashed", colour = "grey40") +
+  scale_y_log10() +
+  facet_grid(NORM ~ FEAT) +
+  labs(x = "factor", y = "effective genes (1/IPR)", colour = "module (thick = pc_exact)") +
   theme_bw()
 ```

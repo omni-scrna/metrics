@@ -76,6 +76,17 @@ def test_pairs_by_lineage_and_scores_exact_and_rotated(tmp_path):
     assert np.all(val("pc_rot", "pc_sin", 3) < 1e-8)         # untouched PC
 
 
+def test_ipr_bounds():
+    from pca_metrics import ipr
+    p = 100
+    one_gene = np.zeros((p, 1)); one_gene[7] = -3.0          # all weight on one gene
+    uniform = np.full((p, 1), 0.2)                            # spread evenly
+    assert np.isclose(ipr(one_gene)[0], 1.0)
+    assert np.isclose(ipr(uniform)[0], 1.0 / p)
+    rnd = np.random.default_rng(1).normal(size=(p, 2000))     # random directions
+    assert abs(ipr(rnd).mean() - 3.0 / (p + 2)) < 2e-3
+
+
 def _rot(k, theta=0.5):
     r = np.eye(k)
     c, s = np.cos(theta), np.sin(theta)

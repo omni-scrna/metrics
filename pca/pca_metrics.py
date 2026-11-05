@@ -14,6 +14,14 @@ Output: one long TSV, one row per (member, metric, index):
   pc_sin         per PC   sin(angle) between loading vectors i (sign-free)
   subspace_sin   per k    largest principal-angle sine, loadings[:, :k]
   scores_sin     per k    same on the cell scores (cells aligned by id)
+  ipr            per PC   inverse participation ratio of the member's OWN loading
+                          vector, sum l^4 / (sum l^2)^2; 1/IPR = effective number
+                          of genes. lambda_i * l_g^2 is gene g's share of
+                          eigenvalue i, so IPR says how concentrated it is.
+  ipr_floor      index 0  3 / n_genes, E[IPR] of a random unit vector
+IPR is unstable inside near-degenerate eigenspaces (where pc_sin rises), and
+means different things under different preprocessing (rare population vs a
+one-gene noise axis), so compare it within one input matrix only.
 Sines from projection residuals: 1 - cos (or sqrt(1 - cos^2)) floors at ~1e-8.
 NMF factors are neither orthogonal nor variance-ordered, so only the
 subspace rows mean anything for them.
@@ -77,10 +85,16 @@ def max_sin(a, b):
     return float(np.linalg.norm(qb - qa @ (qa.T @ qb), ord=2))
 
 
+def ipr(load):
+    """Per-column inverse participation ratio; scale-free (no unit norm needed)."""
+    return (load ** 4).sum(axis=0) / (load ** 2).sum(axis=0) ** 2
+
+
 def compare(ref_emb, ref_load, emb, load, ks):
     """Metric rows for one member against its reference (already aligned)."""
     k = min(ref_emb.shape[1], emb.shape[1])
-    rows = []
+    rows = [("ipr_floor", 0, 3.0 / load.shape[0])]
+    rows += [("ipr", i + 1, float(v)) for i, v in enumerate(ipr(load))]
     var_ref = ref_emb[:, :k].var(axis=0, ddof=1)
     var = emb[:, :k].var(axis=0, ddof=1)
     for i in range(k):
