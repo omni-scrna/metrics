@@ -87,6 +87,20 @@ def test_ipr_bounds():
     assert abs(ipr(rnd).mean() - 3.0 / (p + 2)) < 2e-3
 
 
+def test_total_variance_matches_dense(tmp_path):
+    import h5py
+    import scipy.sparse as sp
+    from pca_metrics import total_variance
+    rng = np.random.default_rng(2)
+    x = sp.random(30, 200, density=0.2, random_state=3, format="csc") * 5  # genes x cells
+    with h5py.File(tmp_path / "m.h5", "w") as f:
+        g = f.create_group("matrix")
+        g["data"], g["indices"], g["indptr"] = x.data, x.indices, x.indptr
+        g["shape"] = np.array(x.shape)
+    dense = x.toarray()
+    assert np.isclose(total_variance(str(tmp_path / "m.h5")), dense.var(axis=1, ddof=1).sum())
+
+
 def _rot(k, theta=0.5):
     r = np.eye(k)
     c, s = np.cos(theta), np.sin(theta)

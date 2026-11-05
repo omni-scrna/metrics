@@ -20,7 +20,8 @@ all[, NORM := sub("\\..*$", "", norm)][, FEAT := sub("\\..*$", "", feat)]
 all[, basis := fifelse(grepl("nmf", pca), "NMF", "PCA")]
 # localisation rows are per arm, the reference included; accuracy rows exclude it
 loc <- all[metric %in% c("ipr", "ipr_floor")]
-m <- all[is_reference == FALSE & !metric %in% c("ipr", "ipr_floor")]
+ve <- all[metric == "var_explained"]
+m <- all[is_reference == FALSE & !metric %in% c("ipr", "ipr_floor", "var_explained")]
 # log axes: exact agreement is 0, show it at the double-precision floor
 floor_ <- 1e-16
 m[, shown := pmax(value, floor_)]
@@ -51,6 +52,41 @@ setorder(s, dataset, basis, pca, input)
 num <- names(s)[sapply(s, is.numeric)]
 s[, (num) := lapply(.SD, sci), .SDcols = num]  # kable(digits=) would round 1e-13 to 0
 knitr::kable(s, align = "l")
+```
+
+## Variance explained
+
+Share of the FEAT matrix's total variance (sum of every gene's variance, not
+of the 50 kept PCs) carried by each PC of `pc_exact`, and its cumulative sum.
+Dotted line: the elbow from `PCAtools::findElbowPoint()` on that curve; it
+only sees the 50 kept PCs.
+
+```{r}
+if (nrow(ve) == 0) {
+  cat("No `normalized_selected_h5` was gathered, so total variance is unknown.\n")
+} else {
+  ref <- ve[is_reference == TRUE, .(PC = index, pct = 100 * value, NORM, FEAT, input)]
+  ref[, cum := cumsum(pct), by = input]
+  elb <- ref[, .(elbow = PCAtools::findElbowPoint(pct)), by = .(NORM, FEAT, input)]
+  tab <- merge(elb, ref[, .(`% PC1` = pct[PC == 1], `cum % 10 PCs` = cum[PC == 10],
+                            `cum % 50 PCs` = cum[PC == max(PC)]), by = input], by = "input")
+  knitr::kable(tab[, !"input"], digits = 1)
+}
+```
+
+```{r}
+#| fig-height: 8
+#| fig-width: 11
+if (nrow(ve) > 0) {
+  ggplot(ref, aes(PC)) +
+    geom_col(aes(y = pct), fill = "grey55", width = 0.8) +
+    geom_line(aes(y = cum / 5), colour = "steelblue") +
+    geom_vline(data = elb, aes(xintercept = elbow), linetype = "dotted") +
+    scale_y_continuous("% of total variance (bars)",
+                       sec.axis = sec_axis(~ . * 5, name = "cumulative % (line)")) +
+    facet_grid(NORM ~ FEAT) +
+    theme_bw()
+}
 ```
 
 ## Per-PC loading error

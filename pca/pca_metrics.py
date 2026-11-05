@@ -19,6 +19,9 @@ Output: one long TSV, one row per (member, metric, index):
                           of genes. lambda_i * l_g^2 is gene g's share of
                           eigenvalue i, so IPR says how concentrated it is.
   ipr_floor      index 0  3 / n_genes, E[IPR] of a random unit vector
+  var_explained  per PC   var_i / total variance of the FEAT matrix (sum of every
+                          gene's variance, not of the kept PCs), when
+                          --normalized_selected_h5 is gathered too
 IPR is unstable inside near-degenerate eigenspaces (where pc_sin rises), and
 means different things under different preprocessing (rare population vs a
 one-gene noise axis), so compare it within one input matrix only.
@@ -32,6 +35,7 @@ import re
 import sys
 from pathlib import Path
 
+import h5py
 import numpy as np
 import polars as pl
 
@@ -121,8 +125,22 @@ def pair_members(embeddings, loadings, stage):
     return out
 
 
-def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT"):
+def total_variance(h5):
+    """Sum of per-gene variances (ddof=1) of a TENx genes x cells CSC matrix:
+    the trace of the covariance PCA decomposes, without densifying."""
+    with h5py.File(h5, "r") as f:
+        g = f["matrix"]
+        n_genes, n_cells = (int(v) for v in g["shape"][:])
+        idx, x = g["indices"][:], g["data"][:].astype(np.float64)
+    s1 = np.bincount(idx, weights=x, minlength=n_genes)
+    s2 = np.bincount(idx, weights=x * x, minlength=n_genes)
+    return float(((s2 - s1 * s1 / n_cells) / (n_cells - 1)).sum())
+
+
+def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrices=()):
     members = pair_members(embeddings, loadings, stage)
+    # FEAT node dir -> its matrix, for the variance-explained denominator
+    totals = {str(Path(h).parent): h for h in matrices}
     refs = {}
     for e in members:
         if lineage(e)[stage][0] == reference_module:
@@ -146,7 +164,13 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT"):
         load = align(*read_matrix(lo), genes)
         lin = lineage(e)
         meta = {s: f"{m}.{h}" for s, (m, h) in lin.items()}
-        for metric, idx, value in compare(ref_emb, ref_load, emb, load, ks):
+        extra = []
+        if key in totals:
+            if isinstance(totals[key], str):
+                totals[key] = total_variance(totals[key])
+            var = emb.var(axis=0, ddof=1)
+            extra = [("var_explained", i + 1, float(v / totals[key])) for i, v in enumerate(var)]
+        for metric, idx, value in compare(ref_emb, ref_load, emb, load, ks) + extra:
             rows.append({
                 "dataset": lin.get("DATA", ("", ""))[0],
                 "norm": meta.get("NORM", ""),
@@ -166,6 +190,8 @@ def parse_args():
     cli.add_base_args(p)  # --output_dir, --name, --output id=PATH
     p.add_argument("--embedding_tsv", nargs="+", required=True, help="every gathered embedding")
     p.add_argument("--loadings_tsv", nargs="+", required=True, help="every gathered loadings")
+    p.add_argument("--normalized_selected_h5", nargs="*", default=[],
+                   help="FEAT matrices, for variance explained (optional)")
     p.add_argument("--reference_module", default="pc_exact",
                    help="PCA module id taken as the exact reference")
     p.add_argument("--ks", default="5,10,20,30,50",
@@ -176,7 +202,8 @@ def parse_args():
 def main():
     args = parse_args()
     ks = [int(k) for k in args.ks.split(",")]
-    df = run(args.embedding_tsv, args.loadings_tsv, args.reference_module, ks)
+    df = run(args.embedding_tsv, args.loadings_tsv, args.reference_module, ks,
+             matrices=args.normalized_selected_h5)
     out = cli.output_path(args, "pca_metrics_tsv", "_pca_metrics.tsv")
     out.parent.mkdir(parents=True, exist_ok=True)
     df.write_csv(out, separator="\t")
