@@ -31,11 +31,8 @@ m[, shown := pmax(value, floor_)]
 sci <- function(x) formatC(x, format = "e", digits = 1)
 ```
 
-Every PCA arm is compared with `pc_exact` (scanpy, dense LAPACK SVD, float64)
-computed on **the same** `normalized_selected` matrix: same dataset, NORM and
-FEAT branch. Sines come from projection residuals, so values down to ~1e-15
-are real. NMF factors are neither orthogonal nor ordered by variance: read only
-their subspace rows.
+Each PCA arm vs `pc_exact` (dense LAPACK SVD, float64) on the same input
+matrix. NMF is not a PCA basis: read only its subspace rows.
 
 `r m[, uniqueN(pca)]` PCA modules, `r m[, uniqueN(input)]` input matrices,
 `r m[, uniqueN(dataset)]` dataset(s), from `r length(files)` metric table(s).
@@ -57,19 +54,10 @@ knitr::kable(s, align = "l")
 
 ## Variance explained
 
-Share of the FEAT matrix's total variance (sum of every gene's variance, not
-of the 50 kept PCs) carried by each PC of `pc_exact`, and its cumulative sum.
-Dotted line: the elbow from `PCAtools::findElbowPoint()` on that curve; it
-only sees the 50 kept PCs. Red dashed line: the parallel-analysis noise edge
-(95th percentile of the top eigenvalue after shuffling every gene across cells,
-20 times; Horn 1965, in the permutation form of Buja & Eyuboglu 1992, with
-Glorfeld's 1995 95th percentile). PCs above it carry structure; the bulk below
-it is per-gene noise, which is why 50 PCs leave half the total variance
-unexplained. This is the *edge* form: every PC is compared with the top
-shuffled eigenvalue. Horn's original compares PC i with the i-th shuffled
-eigenvalue (as `PCAtools::parallelPCA` does) and keeps slightly more; for the
-first component the two coincide with the Tracy-Widom test (Saccenti &
-Timmerman 2017).
+`pc_exact`, % of the matrix's total variance. Dotted: elbow
+(`PCAtools::findElbowPoint`). Red dashed: parallel-analysis noise edge (genes
+shuffled across cells, 95th pct of the top eigenvalue; Horn 1965). PCs below
+it are noise.
 
 ```{r}
 if (nrow(ve) == 0) {
@@ -105,8 +93,7 @@ if (nrow(ve) > 0) {
 
 ## Per-PC loading error
 
-sin(angle) between each PC's loading vector and the reference's. Rising error
-at high PCs is expected where the eigengap closes (PCs below the noise edge).
+sin(angle) between each PC's loadings and the reference's.
 
 ```{r}
 #| fig-height: 8
@@ -121,8 +108,7 @@ ggplot(m[metric == "pc_sin" & basis == "PCA"], aes(index, shown, colour = pca, g
 
 ## Leading-subspace error
 
-Largest principal-angle sine between the leading k loadings (solid) and cell
-scores (dashed) of each arm and the reference.
+Largest principal-angle sine, leading k PCs: loadings and cell scores.
 
 ```{r}
 #| fig-height: 8
@@ -139,7 +125,7 @@ ggplot(sub, aes(index, shown, colour = pca, linetype = metric,
 
 ## Eigenvalue error
 
-Relative error of each PC's score variance against the reference eigenvalue.
+Relative error of each PC's variance vs the reference eigenvalue.
 
 ```{r}
 #| fig-height: 8
@@ -154,13 +140,9 @@ ggplot(m[metric == "eig_rel_err" & basis == "PCA"], aes(index, shown, colour = p
 
 ## Loading localisation (IPR)
 
-Effective number of genes per factor, 1/IPR with IPR = sum l^4 / (sum l^2)^2.
-Gene g carries lambda_i * l_g^2 of eigenvalue i, so a low value means that
-PC's variance sits on few genes. Dashed: a random unit vector (n_genes / 3).
-Arms that match the reference overlap it; IPR is unstable where PCs are
-near-degenerate, and in log-normalised data a very localised PC is often a
-single-gene noise axis rather than a rare population, so read it within a
-panel, not across NORM branches.
+Effective genes per factor (1/IPR): how many genes carry its variance. Dashed:
+random vector. Low values can be sparsity artefacts or single-gene noise axes,
+not biology (Aparicio 2020); compare within a panel.
 
 ```{r}
 #| fig-height: 8
@@ -179,10 +161,6 @@ ggplot(eff, aes(PC, eff_genes, colour = pca, group = interaction(pca, pca_params
 
 ## References
 
-- Horn JL (1965). A rationale and test for the number of factors in factor analysis. *Psychometrika* 30:179–185. [doi:10.1007/BF02289447](https://doi.org/10.1007/BF02289447)
-- Buja A, Eyuboglu N (1992). Remarks on parallel analysis. *Multivariate Behavioral Research* 27(4):509–540. [doi:10.1207/s15327906mbr2704_2](https://doi.org/10.1207/s15327906mbr2704_2)
-- Glorfeld LW (1995). An improvement on Horn's parallel analysis methodology for selecting the correct number of factors to retain. *Educational and Psychological Measurement* 55(3):377–393.
-- Saccenti E, Timmerman ME (2017). Considering Horn's parallel analysis from a random matrix theory point of view. *Psychometrika* 82:186–209. [doi:10.1007/s11336-016-9515-z](https://doi.org/10.1007/s11336-016-9515-z)
-- Single-cell use of parallel analysis: `PCAtools::parallelPCA` (Blighe & Lun, Bioconductor); Lun A, *Choosing the number of PCs for denoising*, CRUK Cambridge Institute technical report ([pdf](https://content.cruk.cam.ac.uk/jmlab/gitlab/miscellaneous/technical-reports/pc-selection.pdf)).
-- Elbow: `PCAtools::findElbowPoint`. Elbow methods are the most common PC choice in single-cell work (Zhuang H et al. 2022, findPC, *Bioinformatics* 38(10):2949).
-- IPR: Plerou V et al. (2002). Random matrix approach to cross correlations in financial data. *Phys Rev E* 65:066126. On scRNA-seq, sparsity alone can localise eigenvectors: Aparicio L et al. (2020). *Patterns* 1(3):100035.
+- Horn JL (1965) *Psychometrika* 30:179. Parallel analysis.
+- Aparicio L et al. (2020) *Patterns* 1:100035. Random-matrix noise and sparsity-induced localisation in scRNA-seq.
+- PCAtools (Bioconductor): `findElbowPoint`, `parallelPCA`.
