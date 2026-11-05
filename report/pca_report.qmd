@@ -19,6 +19,10 @@ m[, input := paste(norm, feat, sep = " / ")]
 # log axes: exact agreement is 0, show it at the double-precision floor
 floor_ <- 1e-16
 m[, shown := pmax(value, floor_)]
+# NMF is not a PCA basis (not orthogonal, not variance-ordered): per-PC and
+# eigenvalue rows compare unrelated factors, so those plots leave it out
+m[, basis := fifelse(grepl("nmf", pca), "NMF", "PCA")]
+sci <- function(x) formatC(x, format = "e", digits = 1)
 ```
 
 Every PCA arm is compared with `pc_exact` (scanpy, dense LAPACK SVD, float64)
@@ -38,9 +42,11 @@ s <- m[, .(
   `subspace_sin k=10` = value[metric == "subspace_sin" & index == 10][1],
   `subspace_sin k=50` = value[metric == "subspace_sin" & index == 50][1],
   `max eig_rel_err, PC1-10` = max(value[metric == "eig_rel_err" & index <= 10])
-), by = .(dataset, pca, pca_params, input)]
-setorder(s, dataset, pca, input)
-knitr::kable(s, digits = 3, format.args = list(scientific = TRUE))
+), by = .(dataset, basis, pca, pca_params, input)]
+setorder(s, dataset, basis, pca, input)
+num <- names(s)[sapply(s, is.numeric)]
+s[, (num) := lapply(.SD, sci), .SDcols = num]  # kable(digits=) would round 1e-13 to 0
+knitr::kable(s, align = "l")
 ```
 
 ## Per-PC loading error
@@ -50,7 +56,7 @@ at high PCs is expected where the eigengap closes (PCs below the noise edge).
 
 ```{r}
 #| fig-height: 7
-ggplot(m[metric == "pc_sin"], aes(index, shown, colour = pca, group = interaction(pca, pca_params))) +
+ggplot(m[metric == "pc_sin" & basis == "PCA"], aes(index, shown, colour = pca, group = interaction(pca, pca_params))) +
   geom_line() +
   scale_y_log10() +
   facet_wrap(~input) +
@@ -81,7 +87,7 @@ Relative error of each PC's score variance against the reference eigenvalue.
 
 ```{r}
 #| fig-height: 7
-ggplot(m[metric == "eig_rel_err"], aes(index, shown, colour = pca, group = interaction(pca, pca_params))) +
+ggplot(m[metric == "eig_rel_err" & basis == "PCA"], aes(index, shown, colour = pca, group = interaction(pca, pca_params))) +
   geom_line() +
   scale_y_log10() +
   facet_wrap(~input) +
