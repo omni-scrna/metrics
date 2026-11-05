@@ -20,8 +20,7 @@ Output: one long TSV, one row per (member, metric, index):
                           eigenvalue i, so IPR says how concentrated it is.
   ipr_floor      index 0  3 / n_genes, E[IPR] of a random unit vector
   var_explained  per PC   var_i / total variance of the FEAT matrix (sum of every
-                          gene's variance, not of the kept PCs), when
-                          --normalized_selected_h5 is gathered too
+                          gene's variance, not of the kept PCs)
   pa_edge        index 0  parallel-analysis noise edge as a share of total
                           variance: the --pa_quantile of the TOP eigenvalue
                           after shuffling every gene across cells. PCs above it
@@ -59,6 +58,7 @@ subspace rows mean anything for them.
 """
 
 import argparse
+import glob
 import re
 import sys
 from pathlib import Path
@@ -72,6 +72,9 @@ from scipy.sparse.linalg import LinearOperator, eigsh
 sys.path.insert(0, str(Path(__file__).parent / "../src"))  # vendored `common`
 from common import cli  # noqa: E402
 
+COLUMNS = {"dataset": pl.Utf8, "norm": pl.Utf8, "feat": pl.Utf8, "pca": pl.Utf8,
+           "pca_params": pl.Utf8, "is_reference": pl.Boolean, "metric": pl.Utf8,
+           "index": pl.Int64, "value": pl.Float64}
 SEGMENT = re.compile(r"^([A-Z][A-Z0-9_]*)\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)$")
 
 
@@ -225,8 +228,17 @@ def horn_pvalues(var, perm):
 def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrices=(),
         pa_n_perm=20, pa_quantile=0.95, pa_seed=42):
     members = pair_members(embeddings, loadings, stage)
-    # FEAT node dir -> its matrix, for the variance-explained denominator
+    # FEAT node dir -> its matrix, for the variance-explained denominator.
+    # ponytail: found next to each member's FEAT ancestor, not gathered. A
+    # gathered normalized_selected_h5 makes groups without PCA (d_feat_sel,
+    # RDIMR-only d_pca) half-populated, which ob rejects at plan time. The file
+    # is an ancestor of every PCA member, so a change to it reruns PCA and PCA_M.
     totals = {str(Path(h).parent): h for h in matrices}
+    for e in members:
+        key = prefix(e, anchor)
+        found = glob.glob(str(Path(key) / "*_normalized_selected.h5"))
+        if key not in totals and len(found) == 1:
+            totals[key] = found[0]
     refs = {}
     for e in members:
         if lineage(e)[stage][0] == reference_module:
@@ -234,6 +246,9 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
             if key in refs:
                 raise ValueError(f"two {reference_module} members under {key}")
             refs[key] = e
+    if not members:  # group without PCA (e.g. only RDIMR embeddings): nothing to compare
+        print(f"no {stage} members in this group; writing an empty table")
+        return pl.DataFrame(schema=COLUMNS)
     if not refs:
         raise ValueError(f"no {reference_module} member among {len(members)} {stage} members")
 
@@ -287,7 +302,7 @@ def parse_args():
     p.add_argument("--embedding_tsv", nargs="+", required=True, help="every gathered embedding")
     p.add_argument("--loadings_tsv", nargs="+", required=True, help="every gathered loadings")
     p.add_argument("--normalized_selected_h5", nargs="*", default=[],
-                   help="FEAT matrices, for variance explained (optional)")
+                   help="FEAT matrices (optional; default: found next to each member's FEAT dir)")
     p.add_argument("--pa_n_perm", type=int, default=20,
                    help="parallel-analysis shuffles per FEAT matrix (0 = skip)")
     p.add_argument("--pa_quantile", type=float, default=0.95,
@@ -309,7 +324,7 @@ def main():
     out = cli.output_path(args, "pca_metrics_tsv", "_pca_metrics.tsv")
     out.parent.mkdir(parents=True, exist_ok=True)
     df.write_csv(out, separator="\t")
-    print(f"wrote {df.height} rows for {df['pca'].n_unique()} PCA modules: {out}")
+    print(f"wrote {df.height} rows for {df['pca'].n_unique() if df.height else 0} PCA modules: {out}")
 
 
 if __name__ == "__main__":

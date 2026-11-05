@@ -129,6 +129,15 @@ def test_parallel_analysis_edge_separates_planted_signal():
     assert (ev0 > noise_edge(pure, n_perm=10, quantile=0.95, seed=0)).sum() <= 1
 
 
+def test_group_without_pca_members_writes_empty_table(tmp_path):
+    rng = np.random.default_rng(5)
+    d = tmp_path / "DATA.d_pca.aaaaaaaa" / "RDIMR.rd_x.bbbbbbbb"
+    _write(d, "rd_x_embedding.tsv", ["c1", "c2", "c3"], rng.normal(size=(3, 2)), "cell_id")
+    _write(d, "rd_x_loadings.tsv", ["g1", "g2"], rng.normal(size=(2, 2)), "gene_id")
+    df = run([str(d / "rd_x_embedding.tsv")], [str(d / "rd_x_loadings.tsv")], "pc_exact", ks=[2])
+    assert df.height == 0 and "value" in df.columns
+
+
 def _rot(k, theta=0.5):
     r = np.eye(k)
     c, s = np.cos(theta), np.sin(theta)
