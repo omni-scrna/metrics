@@ -223,6 +223,14 @@ def n_workers():
 _SHARED = {}  # key -> matrix; set before forking so workers inherit it, unpickled
 
 
+def _one_blas_thread():
+    # Each worker is one core's worth of work. Left alone, every worker's BLAS
+    # (ARPACK's dense steps) starts OMP_NUM_THREADS or all-core threads: 16
+    # workers ran 5x slower each than one alone (measured on rolandgarros).
+    from threadpoolctl import threadpool_limits
+    threadpool_limits(1)
+
+
 def _shared_shuffle(task):
     key, k, seed_seq = task
     return key, top_eigenvalues(shuffle_genes(_SHARED[key], np.random.default_rng(seed_seq)), k)
@@ -241,7 +249,8 @@ def shuffled_spectra_many(mats, n_perm, ks, seed, workers=None):
             done = [_shared_shuffle(t) for t in tasks]
         else:
             ctx = multiprocessing.get_context("fork")  # matrices shared copy-on-write
-            with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
+            with ProcessPoolExecutor(max_workers=workers, mp_context=ctx,
+                                     initializer=_one_blas_thread) as ex:
                 done = list(ex.map(_shared_shuffle, tasks, chunksize=1))
     finally:
         _SHARED.clear()
