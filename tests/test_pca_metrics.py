@@ -123,6 +123,9 @@ def test_parallel_analysis_edge_separates_planted_signal():
     p = horn_pvalues(ev[:10], shuffled_spectra(x, n_perm=19, k=10, seed=0))
     keep = int(np.argmax(p >= 0.1)) if (p >= 0.1).any() else len(p)       # parallelPCA's rule
     assert keep == 2
+    a = shuffled_spectra(x, n_perm=6, k=3, seed=7, workers=1)
+    b = shuffled_spectra(x, n_perm=6, k=3, seed=7, workers=3)
+    assert np.array_equal(a, b)                                          # same result in parallel
     pure = sp.csr_matrix(noise)
     pc = pure.toarray() - pure.toarray().mean(axis=1, keepdims=True)
     ev0 = np.linalg.eigvalsh(pc @ pc.T / (n_cells - 1))[::-1]

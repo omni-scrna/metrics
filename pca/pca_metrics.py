@@ -59,7 +59,9 @@ subspace rows mean anything for them.
 
 import argparse
 import glob
+import os
 import re
+from concurrent.futures import ProcessPoolExecutor
 import sys
 from pathlib import Path
 
@@ -186,7 +188,9 @@ def top_eigenvalues(x, k=1):
     xt = x.T.tocsr()
     op = LinearOperator((x.shape[0],) * 2, dtype=np.float64,
                         matvec=lambda v: (x @ (xt @ v) - n * mu * (mu @ v)) / (n - 1))
-    return np.sort(eigsh(op, k=k, which="LA", return_eigenvectors=False))[::-1]
+    # fixed start vector: ARPACK's default is random, so reruns would differ in the last digits
+    v0 = np.full(x.shape[0], 1.0 / np.sqrt(x.shape[0]))
+    return np.sort(eigsh(op, k=k, which="LA", v0=v0, return_eigenvectors=False))[::-1]
 
 
 def top_eigenvalue(x):
@@ -206,10 +210,30 @@ def shuffle_genes(x, rng):
     return y
 
 
-def shuffled_spectra(x, n_perm, k, seed):
-    """n_perm x k: the top k eigenvalues of each gene-wise shuffle of `x`."""
-    rng = np.random.default_rng(seed)
-    return np.array([top_eigenvalues(shuffle_genes(x, rng), k) for _ in range(n_perm)])
+def _one_shuffle(args):
+    x, k, seed_seq = args
+    return top_eigenvalues(shuffle_genes(x, np.random.default_rng(seed_seq)), k)
+
+
+def n_workers():
+    """Worker processes for the shuffles: the rule's threads (snakemake exports
+    OMP_NUM_THREADS from resources.cores), else 1."""
+    try:
+        return max(1, int(os.environ.get("OMP_NUM_THREADS", "1")))
+    except ValueError:
+        return 1
+
+
+def shuffled_spectra(x, n_perm, k, seed, workers=None):
+    """n_perm x k: the top k eigenvalues of each gene-wise shuffle of `x`. Each
+    shuffle has its own child seed, so the result does not depend on `workers`."""
+    seeds = np.random.SeedSequence(seed).spawn(n_perm)
+    workers = workers or n_workers()
+    jobs = [(x, k, s) for s in seeds]
+    if workers == 1:
+        return np.array([_one_shuffle(j) for j in jobs])
+    with ProcessPoolExecutor(max_workers=min(workers, n_perm)) as ex:
+        return np.array(list(ex.map(_one_shuffle, jobs)))
 
 
 def noise_edge(x, n_perm, quantile, seed):
