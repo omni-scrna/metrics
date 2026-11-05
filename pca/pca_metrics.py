@@ -54,8 +54,10 @@ def prefix(path, stage):
 
 def read_matrix(path):
     """First column = row ids (cells or genes), the rest = factors."""
-    df = pl.read_csv(path, separator="\t")
-    return df[:, 0].cast(str).to_list(), df[:, 1:].to_numpy().astype(np.float64)
+    # no type inference: a factor column whose first rows are integers (NMF
+    # zeros) would be typed Int64 and fail on the first decimal
+    df = pl.read_csv(path, separator="\t", infer_schema=False)
+    return df[:, 0].to_list(), df[:, 1:].cast(pl.Float64).to_numpy()
 
 
 def align(ids, x, ref_ids):

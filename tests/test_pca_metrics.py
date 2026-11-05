@@ -53,6 +53,13 @@ def test_pairs_by_lineage_and_scores_exact_and_rotated(tmp_path):
     _write(iso, "dr_isomap_embedding.tsv", cells, rng.normal(size=(60, 6)), "cell_id")
     emb.append(str(iso / "dr_isomap_embedding.tsv"))
 
+    # integer-looking leading rows must not fix a column's type (NMF zeros)
+    lo0 = load[1]  # a non-reference member: extra genes are aligned away
+    lines = open(lo0).read().splitlines()
+    head, first = lines[0], lines[1].split("\t")
+    lines.insert(1, "\t".join(["g_zero"] + ["0"] * (len(first) - 1)))
+    open(lo0, "w").write("\n".join(lines) + "\n")
+
     df = run(emb, load, "pc_exact", ks=[2, 6])
     assert set(df["pca"]) == {"pc_exact", "pc_flip", "pc_rot"}
     assert set(df["norm"]) == {"nr_a.default", "nr_b.default"}
