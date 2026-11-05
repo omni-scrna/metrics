@@ -10,6 +10,8 @@ entrypoints:
   integration-r: integration/integration.R
   integration-py: integration/integration.py
   geometry-py: geometry/geometry.py
+  pca-gather: pca/pca_metrics.py # PCA_M gather: arms vs the exact reference, paired by lineage
+  pca-report: report/render.sh # REPORT gather: Quarto HTML over every PCA_M table
 
 templates:
   repo: https://github.com/omni-scrna/boilerplate
