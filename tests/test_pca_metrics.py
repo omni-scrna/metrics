@@ -126,6 +126,9 @@ def test_parallel_analysis_edge_separates_planted_signal():
     a = shuffled_spectra(x, n_perm=6, k=3, seed=7, workers=1)
     b = shuffled_spectra(x, n_perm=6, k=3, seed=7, workers=3)
     assert np.array_equal(a, b)                                          # same result in parallel
+    from pca_metrics import shuffled_spectra_many
+    many = shuffled_spectra_many({"x": x, "y": x * 2.0}, n_perm=6, ks={"x": 3, "y": 2}, seed=7, workers=4)
+    assert np.array_equal(many["x"], a) and many["y"].shape == (6, 2)   # pooling keys changes nothing
     pure = sp.csr_matrix(noise)
     pc = pure.toarray() - pure.toarray().mean(axis=1, keepdims=True)
     ev0 = np.linalg.eigvalsh(pc @ pc.T / (n_cells - 1))[::-1]

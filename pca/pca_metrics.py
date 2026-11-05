@@ -59,6 +59,7 @@ subspace rows mean anything for them.
 
 import argparse
 import glob
+import multiprocessing
 import os
 import re
 from concurrent.futures import ProcessPoolExecutor
@@ -210,11 +211,6 @@ def shuffle_genes(x, rng):
     return y
 
 
-def _one_shuffle(args):
-    x, k, seed_seq = args
-    return top_eigenvalues(shuffle_genes(x, np.random.default_rng(seed_seq)), k)
-
-
 def n_workers():
     """Worker processes for the shuffles: the rule's threads (snakemake exports
     OMP_NUM_THREADS from resources.cores), else 1."""
@@ -224,16 +220,40 @@ def n_workers():
         return 1
 
 
+_SHARED = {}  # key -> matrix; set before forking so workers inherit it, unpickled
+
+
+def _shared_shuffle(task):
+    key, k, seed_seq = task
+    return key, top_eigenvalues(shuffle_genes(_SHARED[key], np.random.default_rng(seed_seq)), k)
+
+
+def shuffled_spectra_many(mats, n_perm, ks, seed, workers=None):
+    """{key: n_perm x ks[key] shuffled top eigenvalues} for every matrix in `mats`,
+    in one process pool over all (matrix, shuffle) pairs. Each shuffle has its
+    own child seed, so results depend on neither `workers` nor the other keys."""
+    tasks = [(key, ks[key], s) for key in mats for s in np.random.SeedSequence(seed).spawn(n_perm)]
+    workers = min(workers or n_workers(), len(tasks)) if tasks else 1
+    _SHARED.clear()
+    _SHARED.update(mats)
+    try:
+        if workers == 1:
+            done = [_shared_shuffle(t) for t in tasks]
+        else:
+            ctx = multiprocessing.get_context("fork")  # matrices shared copy-on-write
+            with ProcessPoolExecutor(max_workers=workers, mp_context=ctx) as ex:
+                done = list(ex.map(_shared_shuffle, tasks, chunksize=1))
+    finally:
+        _SHARED.clear()
+    out = {key: [] for key in mats}
+    for key, ev in done:  # ex.map keeps task order, so per-key shuffle order is stable
+        out[key].append(ev)
+    return {key: np.array(v) for key, v in out.items()}
+
+
 def shuffled_spectra(x, n_perm, k, seed, workers=None):
-    """n_perm x k: the top k eigenvalues of each gene-wise shuffle of `x`. Each
-    shuffle has its own child seed, so the result does not depend on `workers`."""
-    seeds = np.random.SeedSequence(seed).spawn(n_perm)
-    workers = workers or n_workers()
-    jobs = [(x, k, s) for s in seeds]
-    if workers == 1:
-        return np.array([_one_shuffle(j) for j in jobs])
-    with ProcessPoolExecutor(max_workers=min(workers, n_perm)) as ex:
-        return np.array(list(ex.map(_one_shuffle, jobs)))
+    """n_perm x k: the top k eigenvalues of each gene-wise shuffle of `x`."""
+    return shuffled_spectra_many({0: x}, n_perm, {0: k}, seed, workers)[0]
 
 
 def noise_edge(x, n_perm, quantile, seed):
@@ -276,6 +296,21 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
     if not refs:
         raise ValueError(f"no {reference_module} member among {len(members)} {stage} members")
 
+    # Total variance and the parallel-analysis spectra for every input matrix up
+    # front, all shuffles in one pool (the expensive part of this stage).
+    pa_keys = [k for k in refs if isinstance(totals.get(k), str)]
+    mats = {k: read_tenx(totals[k]) for k in pa_keys}
+    ncomp = {k: read_matrix(refs[k])[1].shape[1] for k in pa_keys}
+    perms = (shuffled_spectra_many(mats, pa_n_perm, ncomp, pa_seed)
+             if pa_n_perm > 0 and mats else {})
+    for k in pa_keys:
+        tot = total_variance(mats[k])
+        perm = perms.get(k)
+        edge = float(np.quantile(perm[:, 0], pa_quantile)) if perm is not None else np.nan
+        totals[k] = (tot, edge, perm)
+        print(f"{k}: total variance {tot:.4g}, PA edge {edge / tot:.4%} of it")
+    del mats
+
     rows = []
     for e, lo in sorted(members.items()):
         key = prefix(e, anchor)
@@ -290,15 +325,7 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
         lin = lineage(e)
         meta = {s: f"{m}.{h}" for s, (m, h) in lin.items()}
         extra = []
-        if key in totals:
-            if isinstance(totals[key], str):  # once per FEAT node, then cached
-                x = read_tenx(totals[key])
-                tot = total_variance(x)
-                perm = (shuffled_spectra(x, pa_n_perm, ref_emb.shape[1], pa_seed)
-                        if pa_n_perm > 0 else None)
-                edge = float(np.quantile(perm[:, 0], pa_quantile)) if perm is not None else np.nan
-                totals[key] = (tot, edge, perm)
-                print(f"{key}: total variance {tot:.4g}, PA edge {edge / tot:.4%} of it")
+        if isinstance(totals.get(key), tuple):
             tot, edge, perm = totals[key]
             var = emb.var(axis=0, ddof=1)
             extra = [("var_explained", i + 1, float(v / tot)) for i, v in enumerate(var)]
