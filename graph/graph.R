@@ -24,7 +24,10 @@ suppressPackageStartupMessages({
 # Add or remove metrics here; must be valid for level = "dataset".
 METRICS <- c("SI", "ISI", "NP", "AMSP", "PWC", "NCE", "adhesion", "cohesion")
 
-source("src/common/cli.R")
+# ob runs entrypoints from the output tree, not the module dir: resolve paths from this file
+here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+source(file.path(here, "../src/common/cli.R"))
+SCHEMA_DIR <- file.path(here, "../src/common/schema")
 p <- arg_parser("GRAPH_M gather: graph metrics over every kNN graph of a dataset")
 p <- add_base_args(p)  # --output_dir, --name
 p <- add_argument(p, "--neighbors_h5", nargs = Inf, help = "every gathered kNN graph")
