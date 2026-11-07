@@ -97,8 +97,10 @@ rows <- parallel::mclapply(args$neighbors_h5, mc.cores = workers, mc.preschedule
 
 out <- output_path(args, "graph_metrics_tsv", "_graph_metrics.tsv")
 dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
-failed <- vapply(rows, inherits, NA, "try-error")
-if (any(failed)) stop(paste(unlist(rows[failed]), collapse = "\n"), call. = FALSE)
+# a worker that errors gives a try-error; one killed (e.g. OOM) gives NULL
+failed <- vapply(rows, function(r) is.null(r) || inherits(r, "try-error"), NA)
+if (any(failed)) stop(sprintf("%d of %d graphs failed:\n%s", sum(failed), length(rows),
+                              paste(args$neighbors_h5[failed], unlist(rows[failed]), collapse = "\n")), call. = FALSE)
 dt <- rbindlist(rows)
 fwrite(dt, out, sep = "\t", na = "NA", quote = FALSE)
 cat(sprintf("wrote %d rows for %d graphs: %s\n", nrow(dt), length(rows), out))
