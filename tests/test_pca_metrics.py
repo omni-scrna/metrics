@@ -149,3 +149,18 @@ def _rot(k, theta=0.5):
     c, s = np.cos(theta), np.sin(theta)
     r[:2, :2] = [[c, -s], [s, c]]
     return r
+
+
+def test_manifest_files_reads_member_paths_by_output_id(tmp_path):
+    import json
+
+    from pca_metrics import manifest_files
+
+    record = {"version": 2, "members": [
+        {"files": {"embedding_tsv": "/a/e.tsv", "loadings_tsv": "/a/l.tsv"}},
+        {"files": {"embedding_tsv": "/b/e.tsv"}},  # e.g. an RDIMR embedding, no loadings
+    ]}
+    path = tmp_path / "lineage.json"
+    path.write_text(json.dumps(record))
+    assert manifest_files(path, "embedding_tsv") == ["/a/e.tsv", "/b/e.tsv"]
+    assert manifest_files(path, "loadings_tsv") == ["/a/l.tsv"]

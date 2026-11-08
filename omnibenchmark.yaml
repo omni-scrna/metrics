@@ -4,7 +4,7 @@ entrypoints:
   normalization-r: normalization/normalization.R
   embedding-py: embedding/embedding.py
   embedding-r: embedding/embedding.R
-  graph-gather: graph/graph.R # GRAPH_M gather: poem graph metrics over every kNN graph of a dataset
+  graph-r: graph/graph.R # GRAPH_M: poem graph metrics for one kNN graph (JSON)
   cluster-r: cluster/cluster.R
   annotation-r: annotation/annotation.R
   integration-r: integration/integration.R

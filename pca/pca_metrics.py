@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """PCA_M (gather): accuracy of every PCA arm against an exact reference.
 
-ob gathers every producer of embedding_tsv / loadings_tsv for one dataset
-(group_by DATA). A gather group mixes NORM and FEAT branches, so the reference
+ob gathers every producer of embedding_tsv / loadings_tsv for one group and
+hands them over as one manifest (`--manifest`, lineage.json v2, ob api 0.8.0). A gather group mixes NORM and FEAT branches, so the reference
 is chosen here, not by the runtime: each PCA member is compared with the
 reference member (--reference_module, default pc_exact) whose lineage matches
 up to FEAT, i.e. the PCA computed on the same normalized_selected matrix.
@@ -59,6 +59,7 @@ subspace rows mean anything for them.
 
 import argparse
 import glob
+import json
 import multiprocessing
 import os
 import re
@@ -359,8 +360,8 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
 def parse_args():
     p = argparse.ArgumentParser(description="PCA_M gather: PCA arms vs an exact reference")
     cli.add_base_args(p)  # --output_dir, --name, --output id=PATH
-    p.add_argument("--embedding_tsv", nargs="+", required=True, help="every gathered embedding")
-    p.add_argument("--loadings_tsv", nargs="+", required=True, help="every gathered loadings")
+    p.add_argument("--manifest", required=True,
+                   help="gather manifest (lineage.json v2): every member's embedding_tsv/loadings_tsv")
     p.add_argument("--normalized_selected_h5", nargs="*", default=[],
                    help="FEAT matrices (optional; default: found next to each member's FEAT dir)")
     p.add_argument("--pa_n_perm", type=int, default=20,
@@ -375,10 +376,19 @@ def parse_args():
     return p.parse_args()
 
 
+def manifest_files(path, output_id):
+    """Every member's file for `output_id`, from an ob gather manifest."""
+    with open(path) as fh:
+        members = json.load(fh)["members"]
+    return [m["files"][output_id] for m in members if output_id in m["files"]]
+
+
 def main():
     args = parse_args()
     ks = [int(k) for k in args.ks.split(",")]
-    df = run(args.embedding_tsv, args.loadings_tsv, args.reference_module, ks,
+    embeddings = manifest_files(args.manifest, "embedding_tsv")
+    loadings = manifest_files(args.manifest, "loadings_tsv")
+    df = run(embeddings, loadings, args.reference_module, ks,
              matrices=args.normalized_selected_h5, pa_n_perm=args.pa_n_perm,
              pa_quantile=args.pa_quantile, pa_seed=args.random_seed)
     out = cli.output_path(args, "pca_metrics_tsv", "_pca_metrics.tsv")

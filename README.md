@@ -12,7 +12,7 @@ Metrics module for the [omni-scrna](https://github.com/omni-scrna) OmniBenchmark
 | `integration-py` | Python (scib-metrics + sklearn) | Batch-corrected embedding TSV | label ASW, cLISI, PCR comparison, ARI, NMI |
 | `embedding-py` | Python (sklearn) | PCA embedding TSV | silhouette, Davies-Bouldin, Calinski-Harabasz |
 | `embedding-r` | R (poem) | PCA embedding TSV | meanSW, meanClassSW, pnSW, minClassSW, CDbW, cohesion, compactness, sep, DBCV |
-| `graph-gather` | R (poem) | every KNN graph (HDF5) of a dataset, gathered; one long TSV | SI, ISI, NP, AMSP, PWC, NCE, adhesion, cohesion |
+| `graph-r` | R (poem) | KNN neighbor graph (HDF5); one JSON per graph | SI, ISI, NP, AMSP, PWC, NCE, adhesion, cohesion |
 | `normalization-r` | R (stats) | PCA embedding TSV and size factors TSV | canonical correlation |
 
 Each entrypoint takes a benchmark stage's method output (a cluster assignment, predicted
