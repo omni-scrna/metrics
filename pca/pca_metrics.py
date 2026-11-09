@@ -8,7 +8,9 @@ compared with the reference member (--reference_module, default pc_exact).
 Members without a PCA stage in their path (ISOMAP, CNTFCT, RDIMR share the
 embedding_tsv id) are skipped.
 
-Output: one long TSV, one row per (member, metric, index):
+Output: one long TSV, one row per (member, metric, index). After the lineage
+columns, one column per `<stage>_<parameter>` of the member's lineage (e.g.
+`feat_number_selected`, `pca_solver`), taken from --from-files.
   eig_rel_err    per PC   |var_i - var_ref_i| / var_ref_i, var = score variance
   pc_sin         per PC   sin(angle) between loading vectors i (sign-free)
   subspace_sin   per k    largest principal-angle sine, loadings[:, :k]
@@ -278,7 +280,9 @@ def horn_pvalues(var, perm):
 
 
 def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrix=None,
-        pa_n_perm=20, pa_quantile=0.95, pa_seed=42):
+        pa_n_perm=20, pa_quantile=0.95, pa_seed=42, labels=None):
+    """`labels`: member embedding path -> extra columns (its lineage's parameter
+    values, from cli.member_parameters), placed after pca_params."""
     members = pair_members(embeddings, loadings, stage)
     # One gather group is one FEAT node, so one matrix serves every member.
     totals = {prefix(e, anchor): matrix for e in members} if matrix else {}
@@ -338,12 +342,35 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
                 "feat": meta.get("FEAT", ""),
                 "pca": lin[stage][0],
                 "pca_params": lin[stage][1],
+                **(labels or {}).get(e, {}),
                 "is_reference": e == r,
                 "metric": metric,
                 "index": idx,
                 "value": value,
             })
-    return pl.DataFrame(rows)
+    return frame(rows)
+
+
+def frame(rows):
+    """Rows -> a typed table. Parameter columns differ between members (a module
+    without the parameter leaves it null); a column whose values mix types
+    becomes text, ints mixed with floats become floats."""
+    keys = list(dict.fromkeys(k for r in rows for k in r))
+    tail = ["is_reference", "metric", "index", "value"]
+    keys = [k for k in keys if k not in tail] + tail
+    cols = {}
+    for k in keys:
+        vals = [r.get(k) for r in rows]
+        if k in COLUMNS:
+            cols[k] = pl.Series(k, vals, dtype=COLUMNS[k])
+            continue
+        kinds = {type(v) for v in vals if v is not None}
+        if kinds == {int, float}:
+            vals = [None if v is None else float(v) for v in vals]
+        elif len(kinds) > 1:
+            vals = [None if v is None else str(v) for v in vals]
+        cols[k] = pl.Series(k, vals)
+    return pl.DataFrame(cols)
 
 
 def parse_args():
@@ -370,9 +397,10 @@ def main():
     ks = [int(k) for k in args.ks.split(",")]
     embeddings = cli.from_files(args.from_files, "embedding_tsv")
     loadings = cli.from_files(args.from_files, "loadings_tsv")
+    labels = cli.member_parameters(args.from_files)
     df = run(embeddings, loadings, args.reference_module, ks,
              matrix=args.normalized_selected_h5, pa_n_perm=args.pa_n_perm,
-             pa_quantile=args.pa_quantile, pa_seed=args.random_seed)
+             pa_quantile=args.pa_quantile, pa_seed=args.random_seed, labels=labels)
     out = cli.output_path(args, "pca_metrics_tsv", "_pca_metrics.tsv")
     out.parent.mkdir(parents=True, exist_ok=True)
     df.write_csv(out, separator="\t")

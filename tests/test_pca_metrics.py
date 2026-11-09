@@ -164,3 +164,29 @@ def test_from_files_reads_member_paths_by_output_id(tmp_path):
     path.write_text(json.dumps(record))
     assert cli.from_files(path, "embedding_tsv") == ["/a/e.tsv", "/b/e.tsv"]
     assert cli.from_files(path, "loadings_tsv") == ["/a/l.tsv"]
+
+
+def test_member_parameters_become_columns(tmp_path):
+    import json
+
+    from pca_metrics import cli, frame
+
+    record = {"version": 2, "members": [
+        {"files": {"embedding_tsv": "/a/e.tsv"},
+         "lineage": [{"stage": "DATA", "parameters": {"dataset_name": "be1"}},
+                     {"stage": "PCA", "parameters": {"solver": "arpack", "n": 50, "ks": [1, 2]}}]},
+        {"files": {"embedding_tsv": "/b/e.tsv"},
+         "lineage": [{"stage": "DATA", "parameters": {"dataset_name": "be1"}},
+                     {"stage": "PCA", "parameters": {"n": 30.5}}]},
+    ]}
+    path = tmp_path / "lineage.json"
+    path.write_text(json.dumps(record))
+    labels = cli.member_parameters(path)
+    assert labels["/a/e.tsv"] == {"data_dataset_name": "be1", "pca_solver": "arpack",
+                                  "pca_n": 50, "pca_ks": "[1, 2]"}
+    base = {"is_reference": False, "metric": "m", "index": 1, "value": 0.5}
+    df = frame([{"pca": "x", **labels["/a/e.tsv"], **base},
+                {"pca": "y", **labels["/b/e.tsv"], **base}])
+    assert df.columns[-4:] == ["is_reference", "metric", "index", "value"]
+    assert df["pca_n"].to_list() == [50.0, 30.5]       # int + float -> float
+    assert df["pca_solver"].to_list() == ["arpack", None]  # absent -> null

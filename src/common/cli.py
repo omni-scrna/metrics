@@ -143,3 +143,22 @@ def from_files(path, output_id: str) -> list[str]:
     with open(path) as fh:
         members = json.load(fh)["members"]
     return [m["files"][output_id] for m in members if output_id in m["files"]]
+
+
+def member_parameters(path) -> dict[str, dict]:
+    """Member file path -> its lineage's parameter values, one key per
+    `<stage>_<parameter>` (e.g. `feat_number_selected`), from the `--from-files`
+    record. Lists and mappings are kept as JSON strings, so every value is a scalar."""
+    with open(path) as fh:
+        members = json.load(fh)["members"]
+    out = {}
+    for m in members:
+        cols = {}
+        for entry in m.get("lineage", []):
+            stage = entry["stage"].lower()
+            for k, v in (entry.get("parameters") or {}).items():
+                scalar = v is None or isinstance(v, (str, int, float, bool))
+                cols[f"{stage}_{k}"] = v if scalar else json.dumps(v, sort_keys=True)
+        for f in m["files"].values():
+            out[f] = cols
+    return out
