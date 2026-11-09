@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """PCA_M (gather): accuracy of every PCA arm against an exact reference.
 
-ob gathers every producer of embedding_tsv / loadings_tsv for one group and
-hands them over as one manifest (`--manifest`, lineage.json v2, ob api 0.8.0). A gather group mixes NORM and FEAT branches, so the reference
-is chosen here, not by the runtime: each PCA member is compared with the
-reference member (--reference_module, default pc_exact) whose lineage matches
-up to FEAT, i.e. the PCA computed on the same normalized_selected matrix.
+ob gathers every producer of embedding_tsv / loadings_tsv under one FEAT node
+and hands them over in one file (`--from-files`, lineage.json v2, ob api 0.8.0),
+with that node's own matrix as `--normalized_selected_h5`. Each PCA member is
+compared with the reference member (--reference_module, default pc_exact).
 Members without a PCA stage in their path (ISOMAP, CNTFCT, RDIMR share the
 embedding_tsv id) are skipped.
 
@@ -58,7 +57,6 @@ subspace rows mean anything for them.
 """
 
 import argparse
-import glob
 import json
 import multiprocessing
 import os
@@ -279,20 +277,11 @@ def horn_pvalues(var, perm):
     return (1 + (perm[:, :k] >= var[:k]).sum(axis=0)) / (perm.shape[0] + 1)
 
 
-def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrices=(),
+def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrix=None,
         pa_n_perm=20, pa_quantile=0.95, pa_seed=42):
     members = pair_members(embeddings, loadings, stage)
-    # FEAT node dir -> its matrix, for the variance-explained denominator.
-    # ponytail: found next to each member's FEAT ancestor, not gathered. A
-    # gathered normalized_selected_h5 makes groups without PCA (d_feat_sel,
-    # RDIMR-only d_pca) half-populated, which ob rejects at plan time. The file
-    # is an ancestor of every PCA member, so a change to it reruns PCA and PCA_M.
-    totals = {str(Path(h).parent): h for h in matrices}
-    for e in members:
-        key = prefix(e, anchor)
-        found = glob.glob(str(Path(key) / "*_normalized_selected.h5"))
-        if key not in totals and len(found) == 1:
-            totals[key] = found[0]
+    # One gather group is one FEAT node, so one matrix serves every member.
+    totals = {prefix(e, anchor): matrix for e in members} if matrix else {}
     refs = {}
     for e in members:
         if lineage(e)[stage][0] == reference_module:
@@ -360,10 +349,10 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
 def parse_args():
     p = argparse.ArgumentParser(description="PCA_M gather: PCA arms vs an exact reference")
     cli.add_base_args(p)  # --output_dir, --name, --output id=PATH
-    p.add_argument("--manifest", required=True,
-                   help="gather manifest (lineage.json v2): every member's embedding_tsv/loadings_tsv")
-    p.add_argument("--normalized_selected_h5", nargs="*", default=[],
-                   help="FEAT matrices (optional; default: found next to each member's FEAT dir)")
+    p.add_argument("--from-files", dest="from_files", required=True,
+                   help="ob gather record (lineage.json v2): every member's embedding_tsv/loadings_tsv")
+    p.add_argument("--normalized_selected_h5", default=None,
+                   help="the FEAT node's matrix (variance explained, parallel analysis; optional)")
     p.add_argument("--pa_n_perm", type=int, default=20,
                    help="parallel-analysis shuffles per FEAT matrix (0 = skip)")
     p.add_argument("--pa_quantile", type=float, default=0.95,
@@ -376,20 +365,13 @@ def parse_args():
     return p.parse_args()
 
 
-def manifest_files(path, output_id):
-    """Every member's file for `output_id`, from an ob gather manifest."""
-    with open(path) as fh:
-        members = json.load(fh)["members"]
-    return [m["files"][output_id] for m in members if output_id in m["files"]]
-
-
 def main():
     args = parse_args()
     ks = [int(k) for k in args.ks.split(",")]
-    embeddings = manifest_files(args.manifest, "embedding_tsv")
-    loadings = manifest_files(args.manifest, "loadings_tsv")
+    embeddings = cli.from_files(args.from_files, "embedding_tsv")
+    loadings = cli.from_files(args.from_files, "loadings_tsv")
     df = run(embeddings, loadings, args.reference_module, ks,
-             matrices=args.normalized_selected_h5, pa_n_perm=args.pa_n_perm,
+             matrix=args.normalized_selected_h5, pa_n_perm=args.pa_n_perm,
              pa_quantile=args.pa_quantile, pa_seed=args.random_seed)
     out = cli.output_path(args, "pca_metrics_tsv", "_pca_metrics.tsv")
     out.parent.mkdir(parents=True, exist_ok=True)

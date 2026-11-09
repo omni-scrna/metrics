@@ -2,8 +2,7 @@
 # GRAPH_M: graph quality metrics (poem) for one kNN graph.
 #
 # Writes one flat JSON (n_cells, n_labels, n_dropped, then one key per metric);
-# metrics are NA when the graph sees < 2 labels. A per-dataset table is a
-# collector's job (obkit.collector over a gather), not this module's.
+# metrics are NA when the graph sees < 2 labels.
 #
 # - Reads KNN distances as CSR from HDF5 (cell_ids, data, indices, indptr).
 # - Converts to a directed igraph for poem's getGraphMetrics.

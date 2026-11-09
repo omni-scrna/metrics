@@ -151,10 +151,10 @@ def _rot(k, theta=0.5):
     return r
 
 
-def test_manifest_files_reads_member_paths_by_output_id(tmp_path):
+def test_from_files_reads_member_paths_by_output_id(tmp_path):
     import json
 
-    from pca_metrics import manifest_files
+    from pca_metrics import cli
 
     record = {"version": 2, "members": [
         {"files": {"embedding_tsv": "/a/e.tsv", "loadings_tsv": "/a/l.tsv"}},
@@ -162,5 +162,5 @@ def test_manifest_files_reads_member_paths_by_output_id(tmp_path):
     ]}
     path = tmp_path / "lineage.json"
     path.write_text(json.dumps(record))
-    assert manifest_files(path, "embedding_tsv") == ["/a/e.tsv", "/b/e.tsv"]
-    assert manifest_files(path, "loadings_tsv") == ["/a/l.tsv"]
+    assert cli.from_files(path, "embedding_tsv") == ["/a/e.tsv", "/b/e.tsv"]
+    assert cli.from_files(path, "loadings_tsv") == ["/a/l.tsv"]

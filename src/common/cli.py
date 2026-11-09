@@ -135,3 +135,11 @@ def add_stage_args(parser: argparse.ArgumentParser, schema: str,
         have = f"available: {', '.join(available)}" if available else "no stage schemas vendored"
         raise SystemExit(f"interface '{schema}' not found in {schema_dir} ({have})")
     return _add_args(parser, _read_schema(stage_path).get("args", []))
+
+
+def from_files(path, output_id: str) -> list[str]:
+    """Every member's file for `output_id`, from the `--from-files` record ob
+    hands a gather (lineage.json v2: one entry per member, files by output id)."""
+    with open(path) as fh:
+        members = json.load(fh)["members"]
+    return [m["files"][output_id] for m in members if output_id in m["files"]]
