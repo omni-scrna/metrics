@@ -3,6 +3,7 @@ name: metrics
 channels:
 - conda-forge
 - bioconda
+- https://repo.prefix.dev/almost-conductor
 - nodefaults
 dependencies:
 - python >=3.12,<3.14
@@ -10,6 +11,8 @@ dependencies:
 - numpy <2.5
 - polars *
 - h5py *
+- scipy *
+- threadpoolctl *
 - pyyaml *
 - r-base >=4.5
 - r-argparser *
@@ -21,6 +24,7 @@ dependencies:
 - bioconductor-rhdf5 *
 - r-yaml *
 - r-mlmetrics *
+- networkx >=3.6.1,<4
 - pip
 - pip:
   - scib-metrics

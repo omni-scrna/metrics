@@ -15,6 +15,7 @@ numpy = "<2.5"  # numba (scib-metrics -> pynndescent/umap-learn) has no numpy>=2
 polars = "*"
 h5py = "*"
 scipy = "*"
+threadpoolctl = "*"  # pca-gather: one BLAS thread per parallel-analysis worker
 pyyaml = "*"
 # R
 r-base = ">=4.5"
