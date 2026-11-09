@@ -1,10 +1,9 @@
 #!/usr/bin/env Rscript
-# GRAPH_M: graph quality metrics (poem) for one kNN graph, or a batch of them.
+# GRAPH_M: graph quality metrics (poem) for one kNN graph.
 #
-# One graph (--neighbors_h5): one flat JSON (n_cells, n_labels, n_dropped, then
-# one key per metric); metrics are NA when the graph sees < 2 labels.
-# Batch (--graph_list_tsv, an obkit members TSV from a gather): one TSV row per
-# graph, its lineage columns first. Loads the libraries once (poem alone ~10 s).
+# Writes one flat JSON (n_cells, n_labels, n_dropped, then one key per metric);
+# metrics are NA when the graph sees < 2 labels. A per-dataset table is a
+# collector's job (obkit.collector over a gather), not this module's.
 #
 # - Reads KNN distances as CSR from HDF5 (cell_ids, data, indices, indptr).
 # - Converts to a directed igraph for poem's getGraphMetrics.
@@ -28,7 +27,6 @@ SCHEMA_DIR <- file.path(here, "../src/common/schema")
 p <- arg_parser("GRAPH_M: graph metrics for one kNN graph")
 p <- add_base_args(p)  # --output_dir, --name
 p <- add_argument(p, "--neighbors_h5", help = "kNN graph (CSR distances, HDF5)")
-p <- add_argument(p, "--graph_list_tsv", help = "members TSV of kNN graphs (obkit collector --mode members)")
 p <- add_argument(p, "--rawdata_clusters_truth", help = "truth labels (cell_id, truths)")
 args <- parse_args_outputs(p)
 
@@ -44,40 +42,23 @@ read_csr_h5 <- function(path) {
   mat
 }
 
-graph_metrics <- function(path, truth) {
-  dist_mat <- read_csr_h5(path)
-  idx <- match(rownames(dist_mat), truth$cell_id)
-  mask <- !is.na(idx)
-  labels <- truth$truths[idx[mask]]
-  if (!all(mask)) dist_mat <- dist_mat[mask, mask]
-  n_labels <- length(unique(labels))
-  scores <- setNames(as.list(rep(NA_real_, length(METRICS))), METRICS)
-  if (n_labels >= 2) {
-    g <- graph_from_adjacency_matrix(dist_mat, mode = "directed", weighted = TRUE)
-    res <- getGraphMetrics(g, labels = labels, metrics = METRICS, level = "dataset")
-    scores <- lapply(setNames(METRICS, METRICS), function(m) as.numeric(res[1, m]))
-  }
-  c(list(n_cells = sum(mask), n_labels = n_labels, n_dropped = sum(!mask)), scores)
-}
-
+dist_mat <- read_csr_h5(args$neighbors_h5)
 truth <- fread(args$rawdata_clusters_truth, header = TRUE)
+idx <- match(rownames(dist_mat), truth$cell_id)
+mask <- !is.na(idx)
+labels <- truth$truths[idx[mask]]
+if (!all(mask)) dist_mat <- dist_mat[mask, mask]
+n_labels <- length(unique(labels))
 
-if (!is.na(args$graph_list_tsv)) {
-  graphs <- fread(args$graph_list_tsv, sep = "\t", colClasses = "character")
-  rows <- lapply(seq_len(nrow(graphs)), function(i) {
-    t0 <- proc.time()[["elapsed"]]
-    r <- graph_metrics(graphs$path[i], truth)
-    gc()
-    cbind(graphs[i, !c("output_id", "path")], as.data.table(r),
-          seconds = proc.time()[["elapsed"]] - t0)
-  })
-  out <- output_path(args, "graph_batch_tsv", "_graph_metrics.tsv")
-  dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
-  fwrite(rbindlist(rows, fill = TRUE), out, sep = "\t", na = "NA", quote = FALSE)
-} else {
-  out <- output_path(args, "graph_metrics_json", "_graph_metrics.json")
-  dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
-  writeLines(toJSON(graph_metrics(args$neighbors_h5, truth), auto_unbox = TRUE,
-                    pretty = TRUE, na = "null", digits = NA), out)
+scores <- setNames(as.list(rep(NA_real_, length(METRICS))), METRICS)
+if (n_labels >= 2) {
+  g <- graph_from_adjacency_matrix(dist_mat, mode = "directed", weighted = TRUE)
+  res <- getGraphMetrics(g, labels = labels, metrics = METRICS, level = "dataset")
+  scores <- lapply(setNames(METRICS, METRICS), function(m) as.numeric(res[1, m]))
 }
+
+result <- c(list(n_cells = sum(mask), n_labels = n_labels, n_dropped = sum(!mask)), scores)
+out <- output_path(args, "graph_metrics_json", "_graph_metrics.json")
+dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
+writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE, na = "null", digits = NA), out)
 cat(sprintf("wrote %s\n", out))
