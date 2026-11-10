@@ -24,12 +24,14 @@ METRICS <- c(
 )
 
 # arg parsing
-source("src/common/cli.R")
-p <- arg_parser("CLUST-M module")
+# ob runs entrypoints from the output tree, not the module dir: resolve paths from this file
+here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+source(file.path(here, "../src/common/cli.R"))
+p <- arg_parser("CLUST_M: partition metrics for one clustering")
 p <- add_base_args(p)                    # --output_dir, --name
-p <- add_stage_args(p, "CLUST-M")     # the stage I/O contract
-# your own method params — argparser directly (its add_argument requires `help`):
-args <- parse_args(p)                    # argparser's own parser
+p <- add_argument(p, "--clusters_tsv", help = "predicted clusters (cell_id, cluster)")
+p <- add_argument(p, "--rawdata_clusters_truth", help = "truth labels (cell_id, truths)")
+args <- parse_args_outputs(p)
 
 # logging
 cat(sprintf("Full command: %s\n", paste(commandArgs(trailingOnly = FALSE), collapse = " ")))
@@ -40,7 +42,6 @@ for (i in 1:length(args)) {
 cat(sprintf("----------------------------------\n"))
 
 
-dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
 pred <- fread(args$clusters_tsv, header = TRUE)
 truth <- fread(args$rawdata_clusters_truth, header = TRUE)
@@ -68,5 +69,6 @@ result <- c(
   list(n_cells = n_cells, n_labels = n_labels, n_dropped = n_dropped),
   scores
 )
-out <- file.path(args$output_dir, sprintf("%s_cluster_metrics.json", args$name))
+out <- output_path(args, "cluster_metrics", "_cluster_metrics.json")
+dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
 writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE), out)

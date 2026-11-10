@@ -26,12 +26,14 @@ METRICS <- c(
 )
 
 # arg parsing
-source("src/common/cli.R")
-p <- arg_parser("EMBED-M module")
+# ob runs entrypoints from the output tree, not the module dir: resolve paths from this file
+here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+source(file.path(here, "../src/common/cli.R"))
+p <- arg_parser("EMBED_M: embedding metrics for one embedding")
 p <- add_base_args(p)                    # --output_dir, --name
-p <- add_stage_args(p, "EMBED-M")     # the stage I/O contract
-# your own method params — argparser directly (its add_argument requires `help`):
-args <- parse_args(p)                    # argparser's own parser
+p <- add_argument(p, "--embedding_tsv", help = "embedding (cell_id, then dimensions)")
+p <- add_argument(p, "--rawdata_clusters_truth", help = "truth labels (cell_id, truths)")
+args <- parse_args_outputs(p)
 
 # logging
 cat(sprintf("Full command: %s\n", paste(commandArgs(trailingOnly = FALSE), collapse = " ")))
@@ -42,7 +44,6 @@ for (i in 1:length(args)) {
 cat(sprintf("----------------------------------\n"))
 
 
-dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
 pca <- fread(args$embedding_tsv, header = TRUE)
 truth <- fread(args$rawdata_clusters_truth, header = TRUE)
@@ -74,8 +75,6 @@ result <- c(
   list(n_cells = n_cells, n_labels = n_labels, n_dropped = n_dropped),
   scores
 )
-out <- file.path(
-  args$output_dir,
-  sprintf("%s_embedding_metrics.json", args$name)
-)
+out <- output_path(args, "embedding_metrics", "_embedding_metrics.json")
+dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
 writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE), out)

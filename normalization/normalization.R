@@ -12,11 +12,14 @@ suppressPackageStartupMessages({
 })
 
 # arg parsing
-source("src/common/cli.R")
-p <- arg_parser("NORM-M module")
+# ob runs entrypoints from the output tree, not the module dir: resolve paths from this file
+here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+source(file.path(here, "../src/common/cli.R"))
+p <- arg_parser("NORM_M: size-factor influence on one embedding")
 p <- add_base_args(p)                    # --output_dir, --name
-p <- add_stage_args(p, "NORM-M")         # --embedding_tsv, --size_factor_tsv
-args <- parse_args(p)
+p <- add_argument(p, "--embedding_tsv", help = "embedding (cell_id, then dimensions)")
+p <- add_argument(p, "--size_factor_tsv", help = "size factors (cell_id, size_factor)")
+args <- parse_args_outputs(p)
 
 # logging
 cat(sprintf("Full command: %s\n", paste(commandArgs(trailingOnly = FALSE), collapse = " ")))
@@ -26,7 +29,6 @@ for (i in 1:length(args)) {
 }
 cat(sprintf("----------------------------------\n"))
 
-dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
 pca <- fread(args$embedding_tsv, header = TRUE)
 size_factors <- fread(args$size_factor_tsv, header = TRUE)
@@ -51,5 +53,6 @@ result <- list(
   n_cells = nrow(pca_matrix)
 )
 
-out <- file.path(args$output_dir, sprintf("%s_normalization_metrics.json", args$name))
+out <- output_path(args, "normalization_metrics", "_normalization_metrics.json")
+dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
 writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE), out)
