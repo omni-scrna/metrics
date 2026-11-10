@@ -11,14 +11,15 @@ entrypoints:
   integration-py: integration/integration.py
   geometry-py: geometry/geometry.py
   pca-gather: pca/pca_metrics.py # PCA_M gather: arms vs the exact reference, paired by lineage
-  pca-report: report/render.sh # REPORT gather: Quarto HTML over every PCA_M table
+  pca-results: pca/pca_results.py # PCA_RESULTS gather: every PCA_M table row-bound into one
+  pca-report: report/render.sh # REPORT_PCA gather: Quarto HTML over the PCA_RESULTS table
 
 templates:
   repo: https://github.com/omni-scrna/boilerplate
   ref: main # the engine lives on boilerplate main
   lang: r
 
-# Benchmark(s) that this module plugs into; `sync` vendors each one's schema/ dir into
+# Benchmark(s) that this module plugs into; `sync` ships each one's schema/ dir into
 # src/common/schema/. Tracking the unmerged contract branch for now.
 benchmarks:
   - name: split-stages

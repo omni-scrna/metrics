@@ -12,7 +12,6 @@ dependencies:
 - polars *
 - h5py *
 - scipy *
-- threadpoolctl *
 - pyyaml *
 - r-base >=4.5
 - r-argparser *

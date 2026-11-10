@@ -3,7 +3,7 @@
 
 ob gathers every producer of embedding_tsv / loadings_tsv under one FEAT node
 and hands them over in one file (`--from-files`, lineage.json v2, ob api 0.8.0),
-with that node's own matrix as `--normalized_selected_h5`. Each PCA member is
+with that node's own matrix as `--normalized_selected_h5` (total variance). Each PCA member is
 compared with the reference member (--reference_module, default pc_exact).
 Members without a PCA stage in their path (ISOMAP, CNTFCT, RDIMR share the
 embedding_tsv id) are skipped.
@@ -22,31 +22,8 @@ columns, one column per `<stage>_<parameter>` of the member's lineage (e.g.
   ipr_floor      index 0  3 / n_genes, E[IPR] of a random unit vector
   var_explained  per PC   var_i / total variance of the FEAT matrix (sum of every
                           gene's variance, not of the kept PCs)
-  pa_edge        index 0  parallel-analysis noise edge as a share of total
-                          variance: the --pa_quantile of the TOP eigenvalue
-                          after shuffling every gene across cells. PCs above it
-                          carry structure; below it is the noise bulk.
-                          Edge form, not Horn's i-th vs i-th comparison (that is
-                          PCAtools::parallelPCA); for the first component the
-                          two coincide and equal the Tracy-Widom test.
-  pa_p           per PC   Horn's rule as in PCAtools::parallelPCA: permutation
-                          p-value of PC i against the i-th shuffled eigenvalue,
-                          (1 + #{perm_i >= var_i}) / (n_perm + 1). parallelPCA
-                          keeps the leading PCs with p < 0.1.
 
 References
-  Horn JL (1965) A rationale and test for the number of factors in factor
-    analysis. Psychometrika 30:179-185. doi:10.1007/BF02289447
-  Buja A, Eyuboglu N (1992) Remarks on parallel analysis. Multivariate Behav
-    Res 27(4):509-540. doi:10.1207/s15327906mbr2704_2  (permutation form)
-  Glorfeld LW (1995) An improvement on Horn's parallel analysis methodology for
-    selecting the correct number of factors to retain. Educ Psychol Meas
-    55(3):377-393.  (95th percentile instead of the mean/median)
-  Saccenti E, Timmerman ME (2017) Considering Horn's parallel analysis from a
-    random matrix theory point of view. Psychometrika 82:186-209.
-    doi:10.1007/s11336-016-9515-z
-  Single-cell use: PCAtools::parallelPCA (Blighe & Lun, Bioconductor); Lun A,
-    "Choosing the number of PCs for denoising" (CRUK technical report).
   IPR: Plerou V et al. (2002) Random matrix approach to cross correlations in
     financial data. Phys Rev E 65:066126. On scRNA-seq, sparsity alone can
     localise eigenvectors: Aparicio L et al. (2020) Patterns 1(3):100035.
@@ -60,10 +37,7 @@ subspace rows mean anything for them.
 
 import argparse
 import json
-import multiprocessing
-import os
 import re
-from concurrent.futures import ProcessPoolExecutor
 import sys
 from pathlib import Path
 
@@ -71,7 +45,6 @@ import h5py
 import numpy as np
 import polars as pl
 import scipy.sparse as sp
-from scipy.sparse.linalg import LinearOperator, eigsh
 
 sys.path.insert(0, str(Path(__file__).parent / "../src"))  # vendored `common`
 from common import cli  # noqa: E402
@@ -79,7 +52,8 @@ from common import cli  # noqa: E402
 COLUMNS = {"dataset": pl.Utf8, "norm": pl.Utf8, "feat": pl.Utf8, "pca": pl.Utf8,
            "pca_params": pl.Utf8, "is_reference": pl.Boolean, "metric": pl.Utf8,
            "index": pl.Int64, "value": pl.Float64}
-SEGMENT = re.compile(r"^([A-Z][A-Z0-9_]*)\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)$")
+# a parameterless node may carry no param field (`STAGE.module`): read it as "default"
+SEGMENT = re.compile(r"^([A-Z][A-Z0-9_]*)\.([A-Za-z0-9_]+)(?:\.([A-Za-z0-9_]+))?$")
 
 
 def lineage(path):
@@ -88,7 +62,7 @@ def lineage(path):
     for part in Path(path).parts:
         m = SEGMENT.match(part)
         if m:
-            out[m.group(1)] = (m.group(2), m.group(3))
+            out[m.group(1)] = (m.group(2), m.group(3) or "default")
     return out
 
 
@@ -182,110 +156,11 @@ def total_variance(x):
     return float(((s2 - s1 * s1 / n) / (n - 1)).sum())
 
 
-def top_eigenvalues(x, k=1):
-    """Largest k eigenvalues (descending) of the gene covariance of genes x
-    cells CSR `x`, centring implicitly: C v = (X (X^T v) - n mu (mu^T v)) / (n - 1)."""
-    n = x.shape[1]
-    mu = np.asarray(x.mean(axis=1)).ravel()
-    xt = x.T.tocsr()
-    op = LinearOperator((x.shape[0],) * 2, dtype=np.float64,
-                        matvec=lambda v: (x @ (xt @ v) - n * mu * (mu @ v)) / (n - 1))
-    # fixed start vector: ARPACK's default is random, so reruns would differ in the last digits
-    v0 = np.full(x.shape[0], 1.0 / np.sqrt(x.shape[0]))
-    return np.sort(eigsh(op, k=k, which="LA", v0=v0, return_eigenvectors=False))[::-1]
-
-
-def top_eigenvalue(x):
-    return float(top_eigenvalues(x, 1)[0])
-
-
-def shuffle_genes(x, rng):
-    """Permute every gene independently across cells. For a sparse row that is
-    moving its nonzeros to random distinct cells; per-gene values are kept."""
-    n = x.shape[1]
-    cols = np.empty_like(x.indices)
-    for g in range(x.shape[0]):
-        a, b = x.indptr[g], x.indptr[g + 1]
-        cols[a:b] = rng.choice(n, b - a, replace=False)
-    y = sp.csr_matrix((x.data.copy(), cols, x.indptr.copy()), shape=x.shape)
-    y.sort_indices()
-    return y
-
-
-def n_workers():
-    """Worker processes for the shuffles: the rule's threads (snakemake exports
-    OMP_NUM_THREADS from resources.cores), else 1."""
-    try:
-        return max(1, int(os.environ.get("OMP_NUM_THREADS", "1")))
-    except ValueError:
-        return 1
-
-
-_SHARED = {}  # key -> matrix; set before forking so workers inherit it, unpickled
-
-
-def _one_blas_thread():
-    # Each worker is one core's worth of work. Left alone, every worker's BLAS
-    # (ARPACK's dense steps) starts OMP_NUM_THREADS or all-core threads: 16
-    # workers ran 5x slower each than one alone (measured on rolandgarros).
-    from threadpoolctl import threadpool_limits
-    threadpool_limits(1)
-
-
-def _shared_shuffle(task):
-    key, k, seed_seq = task
-    return key, top_eigenvalues(shuffle_genes(_SHARED[key], np.random.default_rng(seed_seq)), k)
-
-
-def shuffled_spectra_many(mats, n_perm, ks, seed, workers=None):
-    """{key: n_perm x ks[key] shuffled top eigenvalues} for every matrix in `mats`,
-    in one process pool over all (matrix, shuffle) pairs. Each shuffle has its
-    own child seed, so results depend on neither `workers` nor the other keys."""
-    tasks = [(key, ks[key], s) for key in mats for s in np.random.SeedSequence(seed).spawn(n_perm)]
-    workers = min(workers or n_workers(), len(tasks)) if tasks else 1
-    _SHARED.clear()
-    _SHARED.update(mats)
-    try:
-        if workers == 1:
-            done = [_shared_shuffle(t) for t in tasks]
-        else:
-            ctx = multiprocessing.get_context("fork")  # matrices shared copy-on-write
-            with ProcessPoolExecutor(max_workers=workers, mp_context=ctx,
-                                     initializer=_one_blas_thread) as ex:
-                done = list(ex.map(_shared_shuffle, tasks, chunksize=1))
-    finally:
-        _SHARED.clear()
-    out = {key: [] for key in mats}
-    for key, ev in done:  # ex.map keeps task order, so per-key shuffle order is stable
-        out[key].append(ev)
-    return {key: np.array(v) for key, v in out.items()}
-
-
-def shuffled_spectra(x, n_perm, k, seed, workers=None):
-    """n_perm x k: the top k eigenvalues of each gene-wise shuffle of `x`."""
-    return shuffled_spectra_many({0: x}, n_perm, {0: k}, seed, workers)[0]
-
-
-def noise_edge(x, n_perm, quantile, seed):
-    """Parallel-analysis edge: `quantile` of the top eigenvalue over `n_perm`
-    gene-wise shuffles of `x`."""
-    return float(np.quantile(shuffled_spectra(x, n_perm, 1, seed)[:, 0], quantile))
-
-
-def horn_pvalues(var, perm):
-    """Per-PC permutation p-values of observed eigenvalues `var` against the
-    i-th shuffled eigenvalues `perm` (n_perm x k), as PCAtools::parallelPCA."""
-    k = min(len(var), perm.shape[1])
-    return (1 + (perm[:, :k] >= var[:k]).sum(axis=0)) / (perm.shape[0] + 1)
-
-
 def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrix=None,
-        pa_n_perm=20, pa_quantile=0.95, pa_seed=42, labels=None):
+        labels=None):
     """`labels`: member embedding path -> extra columns (its lineage's parameter
     values, from cli.member_parameters), placed after pca_params."""
     members = pair_members(embeddings, loadings, stage)
-    # One gather group is one FEAT node, so one matrix serves every member.
-    totals = {prefix(e, anchor): matrix for e in members} if matrix else {}
     refs = {}
     for e in members:
         if lineage(e)[stage][0] == reference_module:
@@ -299,20 +174,8 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
     if not refs:
         raise ValueError(f"no {reference_module} member among {len(members)} {stage} members")
 
-    # Total variance and the parallel-analysis spectra for every input matrix up
-    # front, all shuffles in one pool (the expensive part of this stage).
-    pa_keys = [k for k in refs if isinstance(totals.get(k), str)]
-    mats = {k: read_tenx(totals[k]) for k in pa_keys}
-    ncomp = {k: read_matrix(refs[k])[1].shape[1] for k in pa_keys}
-    perms = (shuffled_spectra_many(mats, pa_n_perm, ncomp, pa_seed)
-             if pa_n_perm > 0 and mats else {})
-    for k in pa_keys:
-        tot = total_variance(mats[k])
-        perm = perms.get(k)
-        edge = float(np.quantile(perm[:, 0], pa_quantile)) if perm is not None else np.nan
-        totals[k] = (tot, edge, perm)
-        print(f"{k}: total variance {tot:.4g}, PA edge {edge / tot:.4%} of it")
-    del mats
+    # One gather group is one FEAT node, so one matrix serves every member.
+    total = total_variance(matrix) if matrix else None
 
     rows = []
     for e, lo in sorted(members.items()):
@@ -328,13 +191,9 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
         lin = lineage(e)
         meta = {s: f"{m}.{h}" for s, (m, h) in lin.items()}
         extra = []
-        if isinstance(totals.get(key), tuple):
-            tot, edge, perm = totals[key]
-            var = emb.var(axis=0, ddof=1)
-            extra = [("var_explained", i + 1, float(v / tot)) for i, v in enumerate(var)]
-            extra.append(("pa_edge", 0, float(edge / tot)))
-            if perm is not None:
-                extra += [("pa_p", i + 1, float(p)) for i, p in enumerate(horn_pvalues(var, perm))]
+        if total is not None:
+            extra = [("var_explained", i + 1, float(v / total))
+                     for i, v in enumerate(emb.var(axis=0, ddof=1))]
         for metric, idx, value in compare(ref_emb, ref_load, emb, load, ks) + extra:
             rows.append({
                 "dataset": lin.get("DATA", ("", ""))[0],
@@ -379,12 +238,7 @@ def parse_args():
     p.add_argument("--from-files", dest="from_files", required=True,
                    help="ob gather record (lineage.json v2): every member's embedding_tsv/loadings_tsv")
     p.add_argument("--normalized_selected_h5", default=None,
-                   help="the FEAT node's matrix (variance explained, parallel analysis; optional)")
-    p.add_argument("--pa_n_perm", type=int, default=20,
-                   help="parallel-analysis shuffles per FEAT matrix (0 = skip)")
-    p.add_argument("--pa_quantile", type=float, default=0.95,
-                   help="quantile of the shuffled top eigenvalue taken as the edge")
-    p.add_argument("--random_seed", type=int, default=42, help="seed for the shuffles")
+                   help="the FEAT node's matrix (variance explained; optional)")
     p.add_argument("--reference_module", default="pc_exact",
                    help="PCA module id taken as the exact reference")
     p.add_argument("--ks", default="5,10,20,30,50",
@@ -399,8 +253,7 @@ def main():
     loadings = cli.from_files(args.from_files, "loadings_tsv")
     labels = cli.member_parameters(args.from_files)
     df = run(embeddings, loadings, args.reference_module, ks,
-             matrix=args.normalized_selected_h5, pa_n_perm=args.pa_n_perm,
-             pa_quantile=args.pa_quantile, pa_seed=args.random_seed, labels=labels)
+             matrix=args.normalized_selected_h5, labels=labels)
     out = cli.output_path(args, "pca_metrics_tsv", "_pca_metrics.tsv")
     out.parent.mkdir(parents=True, exist_ok=True)
     df.write_csv(out, separator="\t")

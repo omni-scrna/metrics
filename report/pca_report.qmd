@@ -12,8 +12,7 @@ execute:
 ```{r}
 library(data.table)
 library(ggplot2)
-files <- readLines("inputs.txt")
-all <- rbindlist(lapply(files, fread), fill = TRUE)
+all <- fread(readLines("inputs.txt")[1])  # PCA_RESULTS: every PCA_M table, already concatenated
 all[, input := paste(norm, feat, sep = " / ")]
 # facet labels: module ids without the parameter hash
 all[, NORM := sub("\\..*$", "", norm)][, FEAT := sub("\\..*$", "", feat)]
@@ -21,9 +20,7 @@ all[, basis := fifelse(grepl("nmf", pca), "NMF", "PCA")]
 # localisation rows are per arm, the reference included; accuracy rows exclude it
 loc <- all[metric %in% c("ipr", "ipr_floor")]
 ve <- all[metric == "var_explained"]
-pa <- unique(all[metric == "pa_edge" & is_reference == TRUE, .(NORM, FEAT, input, edge = 100 * value)])
-pap <- all[metric == "pa_p" & is_reference == TRUE]
-m <- all[is_reference == FALSE & !metric %in% c("ipr", "ipr_floor", "var_explained", "pa_edge", "pa_p")]
+m <- all[is_reference == FALSE & !metric %in% c("ipr", "ipr_floor", "var_explained")]
 # log axes: exact agreement is 0, show it at the double-precision floor
 floor_ <- 1e-16
 m[, shown := pmax(value, floor_)]
@@ -36,7 +33,7 @@ Each PCA arm vs `pc_exact` (dense LAPACK SVD, float64) on the same input
 matrix. NMF is not a PCA basis: read only its subspace rows.
 
 `r m[, uniqueN(pca)]` PCA modules, `r m[, uniqueN(input)]` input matrices,
-`r m[, uniqueN(dataset)]` dataset(s), from `r length(files)` metric table(s).
+`r m[, uniqueN(dataset)]` dataset(s).
 
 ## Summary
 
@@ -55,40 +52,19 @@ knitr::kable(s, align = "l")
 
 ## Variance explained
 
-`pc_exact`, % of the matrix's total variance. Dotted: elbow
-(`PCAtools::findElbowPoint`). Red dashed: parallel-analysis noise edge (genes
-shuffled across cells, 95th pct of the top eigenvalue; Horn 1965). PCs below
-it are noise. "parallelPCA rule": Horn's i-th vs i-th comparison, p < 0.1.
-
-```{r}
-if (nrow(ve) == 0) {
-  cat("No `normalized_selected_h5` was gathered, so total variance is unknown.\n")
-} else {
-  ref <- ve[is_reference == TRUE, .(PC = index, pct = 100 * value, NORM, FEAT, input)]
-  ref[, cum := cumsum(pct), by = input]
-  elb <- ref[, .(elbow = PCAtools::findElbowPoint(pct)), by = .(NORM, FEAT, input)]
-  above <- merge(ref, pa, by = c("NORM", "FEAT", "input"))[, .(`PCs above PA edge` = sum(pct > edge),
-                                                               `PA edge %` = edge[1]), by = input]
-  tab <- merge(elb, ref[, .(`% PC1` = pct[PC == 1], `cum % 10 PCs` = cum[PC == 10],
-                            `cum % 50 PCs` = cum[PC == max(PC)]), by = input], by = "input")
-  tab <- merge(tab, above, by = "input", all.x = TRUE)
-  # parallelPCA's rule: leading PCs with p < 0.1 against the i-th shuffled eigenvalue
-  horn <- pap[order(index), .(`PCs (parallelPCA rule)` = {
-    f <- which(value >= 0.1); if (length(f)) f[1] - 1L else .N }), by = input]
-  tab <- merge(tab, horn, by = "input", all.x = TRUE)
-  knitr::kable(tab[, !"input"], digits = 1)
-}
-```
+`pc_exact`: % of the matrix's total variance per PC (bars) and cumulative (line).
 
 ```{r}
 #| fig-height: 8
 #| fig-width: 11
-if (nrow(ve) > 0) {
+if (nrow(ve) == 0) {
+  cat("No `normalized_selected_h5` was given to PCA_M, so total variance is unknown.\n")
+} else {
+  ref <- ve[is_reference == TRUE, .(PC = index, pct = 100 * value, NORM, FEAT, input)]
+  ref[, cum := cumsum(pct), by = input]
   ggplot(ref, aes(PC)) +
     geom_col(aes(y = pct), fill = "grey55", width = 0.8) +
     geom_line(aes(y = cum / 5), colour = "steelblue") +
-    geom_vline(data = elb, aes(xintercept = elbow), linetype = "dotted") +
-    geom_hline(data = pa, aes(yintercept = edge), linetype = "dashed", colour = "firebrick") +
     scale_y_continuous("% of total variance (bars)",
                        sec.axis = sec_axis(~ . * 5, name = "cumulative % (line)")) +
     facet_grid(NORM ~ FEAT) +
@@ -166,6 +142,4 @@ ggplot(eff, aes(PC, eff_genes, colour = pca, group = interaction(pca, pca_params
 
 ## References
 
-- Horn JL (1965) *Psychometrika* 30:179. Parallel analysis.
 - Aparicio L et al. (2020) *Patterns* 1:100035. Random-matrix noise and sparsity-induced localisation in scRNA-seq.
-- PCAtools (Bioconductor): `findElbowPoint`, `parallelPCA`.

@@ -101,40 +101,6 @@ def test_total_variance_matches_dense(tmp_path):
     assert np.isclose(total_variance(str(tmp_path / "m.h5")), dense.var(axis=1, ddof=1).sum())
 
 
-def test_parallel_analysis_edge_separates_planted_signal():
-    import scipy.sparse as sp
-    from pca_metrics import noise_edge, top_eigenvalue, total_variance
-    rng = np.random.default_rng(4)
-    n_genes, n_cells = 80, 600
-    noise = rng.poisson(0.3, size=(n_genes, n_cells)).astype(float)   # sparse-ish counts
-    groups = rng.integers(0, 3, n_cells)                               # 3 cell groups -> rank 2
-    signal = np.zeros_like(noise)
-    signal[:10, groups == 1] += 2.0
-    signal[10:20, groups == 2] += 2.0
-    x = sp.csr_matrix(noise + signal)
-    xc = x.toarray() - x.toarray().mean(axis=1, keepdims=True)
-    ev = np.linalg.eigvalsh(xc @ xc.T / (n_cells - 1))[::-1]
-    assert np.isclose(top_eigenvalue(x), ev[0])
-    assert np.isclose(total_variance(x), ev.sum())
-    edge = noise_edge(x, n_perm=10, quantile=0.95, seed=0)
-    assert (ev > edge).sum() == 2                                       # exactly the planted structure
-    from pca_metrics import horn_pvalues, shuffled_spectra, top_eigenvalues
-    assert np.allclose(top_eigenvalues(x, 5), ev[:5])
-    p = horn_pvalues(ev[:10], shuffled_spectra(x, n_perm=19, k=10, seed=0))
-    keep = int(np.argmax(p >= 0.1)) if (p >= 0.1).any() else len(p)       # parallelPCA's rule
-    assert keep == 2
-    a = shuffled_spectra(x, n_perm=6, k=3, seed=7, workers=1)
-    b = shuffled_spectra(x, n_perm=6, k=3, seed=7, workers=3)
-    assert np.array_equal(a, b)                                          # same result in parallel
-    from pca_metrics import shuffled_spectra_many
-    many = shuffled_spectra_many({"x": x, "y": x * 2.0}, n_perm=6, ks={"x": 3, "y": 2}, seed=7, workers=4)
-    assert np.array_equal(many["x"], a) and many["y"].shape == (6, 2)   # pooling keys changes nothing
-    pure = sp.csr_matrix(noise)
-    pc = pure.toarray() - pure.toarray().mean(axis=1, keepdims=True)
-    ev0 = np.linalg.eigvalsh(pc @ pc.T / (n_cells - 1))[::-1]
-    assert (ev0 > noise_edge(pure, n_perm=10, quantile=0.95, seed=0)).sum() <= 1
-
-
 def test_group_without_pca_members_writes_empty_table(tmp_path):
     rng = np.random.default_rng(5)
     d = tmp_path / "DATA.d_pca.aaaaaaaa" / "RDIMR.rd_x.bbbbbbbb"
@@ -190,3 +156,15 @@ def test_member_parameters_become_columns(tmp_path):
     assert df.columns[-4:] == ["is_reference", "metric", "index", "value"]
     assert df["pca_n"].to_list() == [50.0, 30.5]       # int + float -> float
     assert df["pca_solver"].to_list() == ["arpack", None]  # absent -> null
+
+
+def test_results_row_bind_keeps_every_column(tmp_path):
+    sys.path.insert(0, str(Path(__file__).parent / "../pca"))
+    from pca_results import concat
+    (tmp_path / "a.tsv").write_text("pca\tpca_params\tvalue\nx\t12345678\t0.5\n")
+    (tmp_path / "b.tsv").write_text("pca\tpca_params\tpca_solver\tvalue\ny\tabcdef12\tfull\t1e-13\n")
+    df = concat([tmp_path / "a.tsv", tmp_path / "b.tsv"])
+    assert df.columns == ["pca", "pca_params", "value", "pca_solver"]
+    assert df["pca_params"].to_list() == ["12345678", "abcdef12"]
+    assert df["pca_solver"].to_list() == [None, "full"]
+    assert df["value"].to_list() == ["0.5", "1e-13"]  # text passes through untouched
