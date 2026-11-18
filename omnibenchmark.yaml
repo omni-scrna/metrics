@@ -16,13 +16,13 @@ entrypoints:
 
 templates:
   repo: https://github.com/omni-scrna/boilerplate
-  ref: main # the engine lives on boilerplate main
+  ref: api-0.8.0 # --output id=PATH (parse_args_outputs); back to main once merged
   lang: r
 
 # Benchmark(s) that this module plugs into; `sync` ships each one's schema/ dir into
-# src/common/schema/. Tracking the unmerged contract branch for now.
+# src/common/schema/. Tracking the api-0.8.0 plan branch for now.
 benchmarks:
   - name: split-stages
     repo: https://github.com/omni-scrna/split-stages-plan
     plan: benchmark_conda.yaml
-    ref: refactor-geometry-agreement-spec
+    ref: api-0.8.0

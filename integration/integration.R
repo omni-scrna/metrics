@@ -34,7 +34,7 @@ CMS_METRICS <- c("cms", "entropy", "isi")
 source("src/common/cli.R")
 p <- arg_parser("INTG8-M module")
 p <- add_base_args(p)                    # --output_dir, --name
-p <- add_stage_args(p, "INTG8-M")        # the stage I/O contract
+p <- add_stage_args(p, "INTG8_M")        # the stage I/O contract
 # your own method params — argparser directly (its add_argument requires `help`):
 p <- add_argument(p, "--k", type = "integer", default = 20L,
   help = "Neighborhood size (knn) for CellMixS cms/entropy/isi")

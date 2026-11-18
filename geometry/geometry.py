@@ -37,7 +37,7 @@ def parse_args():
     """Parse OmniBenchmark base arguments and GEOM-M stage inputs."""
     parser = argparse.ArgumentParser(description="GEOM-M module")
     cli.add_base_args(parser)
-    cli.add_stage_args(parser, "GEOM-M")
+    cli.add_stage_args(parser, "GEOM_M")
     return parser.parse_args()
 
 

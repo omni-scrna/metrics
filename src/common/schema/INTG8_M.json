@@ -1,5 +1,5 @@
 {
-  "stage": "INTG8-M",
+  "stage": "INTG8_M",
   "version": "0.0.2",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [
@@ -8,6 +8,6 @@
     { "flag": "--rawdata_h5ad", "type": "path", "help": "Pre-integration AnnData H5AD file (source of per-cell batch labels via obs/_index, obs/<batch_var>)" },
     { "flag": "--properties_info", "type": "path", "help": "Dataset properties YAML (batch_var/sample_var/labels_var) naming which obs column in rawdata_h5ad holds the batch label" },
     { "flag": "--embedding_tsv", "type": "path", "help": "Pre-integration embedding TSV (cell_id + dims) — the 'before' embedding for local-structure-distortion metrics (CellMixS ldfDiff; scib-metrics pcr_comparison)" },
-    { "flag": "--clusters_corrected_tsv", "type": "path", "help": "Cluster labels TSV (cell_id, cluster) from clustering performed on the integrated/corrected embedding (CLUST-C stage)" }
+    { "flag": "--clusters_corrected_tsv", "type": "path", "help": "Cluster labels TSV (cell_id, cluster) from clustering performed on the integrated/corrected embedding (CLUST_C stage)" }
   ]
 }

@@ -44,7 +44,7 @@ def parse_args():
     # hand-rolled below, so the whole CLI stays visible here.
     p = argparse.ArgumentParser(description="INTG8-M module (scib-metrics-backed)")
     cli.add_base_args(p)              # --output_dir, --name
-    cli.add_stage_args(p, "INTG8-M")  # --corrected_tsv, --rawdata_clusters_truth, --rawdata_h5ad, --properties_info, --embedding_tsv, --clusters_corrected_tsv
+    cli.add_stage_args(p, "INTG8_M")  # --corrected_tsv, --rawdata_clusters_truth, --rawdata_h5ad, --properties_info, --embedding_tsv, --clusters_corrected_tsv
     p.add_argument("--n_neighbors", type=int, default=90,
                    help="Neighborhood size (knn) for the graph clisi_knn is computed over")
     p.add_argument("--random_state", type=int, default=0,

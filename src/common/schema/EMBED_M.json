@@ -1,0 +1,9 @@
+{
+  "stage": "EMBED_M",
+  "version": "0.2.0",
+  "benchmark": "omni-scrna/split-stages-plan",
+  "args": [
+    { "flag": "--from-files", "type": "path", "help": "ob gather record (lineage.json v2): every member's embedding_tsv, with its lineage" },
+    { "flag": "--rawdata_clusters_truth", "type": "path", "help": "TSV of ground-truth cluster labels (cell_id, truths), from the DATA node" }
+  ]
+}

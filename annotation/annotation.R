@@ -44,7 +44,7 @@ classification_metrics <- function(pred, truth) {
 source("src/common/cli.R")
 p <- arg_parser("ANNO-M module")
 p <- add_base_args(p)                    # --output_dir, --name
-p <- add_stage_args(p, "ANNO-M")     # the stage I/O contract
+p <- add_stage_args(p, "ANNO_M")     # the stage I/O contract
 # your own method params — argparser directly (its add_argument requires `help`):
 args <- parse_args(p)                    # argparser's own parser
 
