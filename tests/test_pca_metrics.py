@@ -1,4 +1,4 @@
-"""PCA_M: lineage pairing and the accuracy metrics, on synthetic PCA outputs."""
+"""PCA_M: pairing by the gather record's lineage, and the accuracy metrics, on synthetic PCA outputs."""
 
 import sys
 from pathlib import Path
@@ -22,18 +22,32 @@ def _pca(x, k):
     return u[:, :k] * s[:k], vt[:k].T
 
 
+def _node(stage, module, params=None, **parameters):
+    return {"node_id": f"{stage}-{module}-{params}", "stage": stage, "module": module,
+            "params": params, "parameters": parameters}
+
+
+def _member(files, *lineage):
+    return {"node_id": lineage[-1]["node_id"], "files": files, "lineage": list(lineage)}
+
+
 def _arm(root, norm, feat, pca, scores, load, cells, genes):
-    d = root / "DATA.d1.aaaaaaaa" / f"NORM.{norm}.default" / f"FEAT.{feat}.bbbbbbbb" / f"PCA.{pca}.cccccccc"
+    """One PCA member of a gather record; its directory name means nothing to PCA_M."""
+    d = root / f"{norm}-{pca}"
     _write(d, f"{pca}_embedding.tsv", cells, scores, "cell_id")
     _write(d, f"{pca}_loadings.tsv", genes, load, "gene_id")
-    return str(d / f"{pca}_embedding.tsv"), str(d / f"{pca}_loadings.tsv")
+    files = {"embedding_tsv": str(d / f"{pca}_embedding.tsv"), "loadings_tsv": str(d / f"{pca}_loadings.tsv")}
+    feat_node = _node("FEAT", feat, "bbbbbbbb", number_selected=12)
+    feat_node["node_id"] += f"-{norm}"  # one FEAT node per norm: one reference each
+    return _member(files, _node("DATA", "d1", "aaaaaaaa", dataset_name="toy"), _node("NORM", norm),
+                   feat_node, _node("PCA", pca, "cccccccc", n_components=6))
 
 
 def test_pairs_by_lineage_and_scores_exact_and_rotated(tmp_path):
     rng = np.random.default_rng(0)
     cells = [f"c{i}" for i in range(60)]
     genes = [f"g{i}" for i in range(12)]
-    emb, load = [], []
+    members = []
     for norm, scale in (("nr_a", 1.0), ("nr_b", 3.0)):  # two different input matrices
         x = rng.normal(size=(60, 12)) * np.linspace(3, 0.5, 12) * scale
         s, l = _pca(x, 6)
@@ -45,24 +59,29 @@ def test_pairs_by_lineage_and_scores_exact_and_rotated(tmp_path):
             "pc_rot": (s @ _rot(6), l @ _rot(6)),
         }.items():
             c, g = (cells[::-1], genes[::-1]) if pca == "pc_flip" else (cells, genes)
-            e, lo = _arm(tmp_path, norm, "fe_x", pca, ss, ll, c, g)
-            emb.append(e)
-            load.append(lo)
-    # a non-PCA producer of embedding_tsv must be ignored
-    iso = tmp_path / "DATA.d1.aaaaaaaa" / "ISOMAP.dr_isomap.dddddddd"
-    _write(iso, "dr_isomap_embedding.tsv", cells, rng.normal(size=(60, 6)), "cell_id")
-    emb.append(str(iso / "dr_isomap_embedding.tsv"))
+            members.append(_arm(tmp_path, norm, "fe_x", pca, ss, ll, c, g))
+    # a member whose own stage is not PCA must be ignored, whatever files it has
+    iso = _arm(tmp_path, "nr_a", "fe_x", "dr_isomap", rng.normal(size=(60, 6)), rng.normal(size=(12, 6)), cells, genes)
+    iso["lineage"][-1] = _node("ISOMAP", "dr_isomap", "dddddddd")
+    members.append(iso)
 
     # integer-looking leading rows must not fix a column's type (NMF zeros)
-    lo0 = load[1]  # a non-reference member: extra genes are aligned away
+    lo0 = members[1]["files"]["loadings_tsv"]  # a non-reference member: extra genes are aligned away
     lines = open(lo0).read().splitlines()
     head, first = lines[0], lines[1].split("\t")
     lines.insert(1, "\t".join(["g_zero"] + ["0"] * (len(first) - 1)))
     open(lo0, "w").write("\n".join(lines) + "\n")
 
-    df = run(emb, load, "pc_exact", ks=[2, 6])
+    df = run(members, "pc_exact", ks=[2, 6])
     assert set(df["pca"]) == {"pc_exact", "pc_flip", "pc_rot"}
-    assert set(df["norm"]) == {"nr_a.default", "nr_b.default"}
+    # lineage columns from the record (fanin.member_lineage_cols): a node without
+    # parameters is its bare module id, never an invented ".default"
+    assert set(df["norm"]) == {"nr_a", "nr_b"}
+    assert set(df["feat"]) == {"fe_x.bbbbbbbb"} and set(df["pca_params"]) == {"cccccccc"}
+    assert set(df["dataset"]) == {"d1"} and set(df["data_dataset_name"]) == {"toy"}
+    assert "pca_stage" not in df.columns
+    assert df.columns[:5] == ["dataset", "norm", "feat", "pca", "pca_params"]
+    assert df.filter(pl.col("is_reference"))["pca"].unique().to_list() == ["pc_exact"]
 
     def val(pca, metric, idx):
         sel = df.filter((pl.col("pca") == pca) & (pl.col("metric") == metric) & (pl.col("index") == idx))
@@ -102,11 +121,9 @@ def test_total_variance_matches_dense(tmp_path):
 
 
 def test_group_without_pca_members_writes_empty_table(tmp_path):
-    rng = np.random.default_rng(5)
-    d = tmp_path / "DATA.d_pca.aaaaaaaa" / "RDIMR.rd_x.bbbbbbbb"
-    _write(d, "rd_x_embedding.tsv", ["c1", "c2", "c3"], rng.normal(size=(3, 2)), "cell_id")
-    _write(d, "rd_x_loadings.tsv", ["g1", "g2"], rng.normal(size=(2, 2)), "gene_id")
-    df = run([str(d / "rd_x_embedding.tsv")], [str(d / "rd_x_loadings.tsv")], "pc_exact", ks=[2])
+    rd = _member({"embedding_tsv": "/x/e.tsv", "loadings_tsv": "/x/l.tsv"},
+                 _node("DATA", "d_pca", "aaaaaaaa"), _node("RDIMR", "rd_x", "bbbbbbbb"))
+    df = run([rd], "pc_exact", ks=[2])
     assert df.height == 0 and "value" in df.columns
 
 
@@ -117,42 +134,11 @@ def _rot(k, theta=0.5):
     return r
 
 
-def test_from_files_reads_member_paths_by_output_id(tmp_path):
-    import json
-
-    from pca_metrics import cli
-
-    record = {"version": 2, "members": [
-        {"files": {"embedding_tsv": "/a/e.tsv", "loadings_tsv": "/a/l.tsv"}},
-        {"files": {"embedding_tsv": "/b/e.tsv"}},  # e.g. an RDIMR embedding, no loadings
-    ]}
-    path = tmp_path / "lineage.json"
-    path.write_text(json.dumps(record))
-    assert cli.from_files(path, "embedding_tsv") == ["/a/e.tsv", "/b/e.tsv"]
-    assert cli.from_files(path, "loadings_tsv") == ["/a/l.tsv"]
-
-
-def test_member_parameters_become_columns(tmp_path):
-    import json
-
-    from pca_metrics import cli, frame
-
-    record = {"version": 2, "members": [
-        {"files": {"embedding_tsv": "/a/e.tsv"},
-         "lineage": [{"stage": "DATA", "parameters": {"dataset_name": "be1"}},
-                     {"stage": "PCA", "parameters": {"solver": "arpack", "n": 50, "ks": [1, 2]}}]},
-        {"files": {"embedding_tsv": "/b/e.tsv"},
-         "lineage": [{"stage": "DATA", "parameters": {"dataset_name": "be1"}},
-                     {"stage": "PCA", "parameters": {"n": 30.5}}]},
-    ]}
-    path = tmp_path / "lineage.json"
-    path.write_text(json.dumps(record))
-    labels = cli.member_parameters(path)
-    assert labels["/a/e.tsv"] == {"data_dataset_name": "be1", "pca_solver": "arpack",
-                                  "pca_n": 50, "pca_ks": "[1, 2]"}
+def test_frame_types_parameter_columns():
+    from pca_metrics import frame
     base = {"is_reference": False, "metric": "m", "index": 1, "value": 0.5}
-    df = frame([{"pca": "x", **labels["/a/e.tsv"], **base},
-                {"pca": "y", **labels["/b/e.tsv"], **base}])
+    df = frame([{"pca": "x", "pca_solver": "arpack", "pca_n": 50, **base},
+                {"pca": "y", "pca_n": 30.5, **base}])
     assert df.columns[-4:] == ["is_reference", "metric", "index", "value"]
     assert df["pca_n"].to_list() == [50.0, 30.5]       # int + float -> float
     assert df["pca_solver"].to_list() == ["arpack", None]  # absent -> null

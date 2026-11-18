@@ -4,13 +4,15 @@
 ob gathers every producer of embedding_tsv / loadings_tsv under one FEAT node
 and hands them over in one file (`--from-files`, lineage.json v2, ob api 0.8.0),
 with that node's own matrix as `--normalized_selected_h5` (total variance). Each PCA member is
-compared with the reference member (--reference_module, default pc_exact).
-Members without a PCA stage in their path (ISOMAP, CNTFCT, RDIMR share the
-embedding_tsv id) are skipped.
+compared with the reference member (--reference_module, default pc_exact) under
+the same FEAT node. Everything about a member (its files, its stage, module and
+params, the FEAT node it hangs off) comes from the record, never from its path;
+members whose own stage is not PCA are skipped.
 
-Output: one long TSV, one row per (member, metric, index). After the lineage
-columns, one column per `<stage>_<parameter>` of the member's lineage (e.g.
-`feat_number_selected`, `pca_solver`), taken from --from-files.
+Output: one long TSV, one row per (member, metric, index). Lineage columns as
+src/fanin.py writes them (dataset, filt, norm, feat, pca, pca_params, then one
+`<stage>_<parameter>` per lineage parameter, e.g. `feat_number_selected`), the
+same as EMBED_M's, so the two tables join.
   eig_rel_err    per PC   |var_i - var_ref_i| / var_ref_i, var = score variance
   pc_sin         per PC   sin(angle) between loading vectors i (sign-free)
   subspace_sin   per k    largest principal-angle sine, loadings[:, :k]
@@ -36,8 +38,6 @@ subspace rows mean anything for them.
 """
 
 import argparse
-import json
-import re
 import sys
 from pathlib import Path
 
@@ -46,33 +46,13 @@ import numpy as np
 import polars as pl
 import scipy.sparse as sp
 
-sys.path.insert(0, str(Path(__file__).parent / "../src"))  # vendored `common`
+sys.path.insert(0, str(Path(__file__).parent / "../src"))  # vendored `common`, fanin
+import fanin  # noqa: E402
 from common import cli  # noqa: E402
 
-COLUMNS = {"dataset": pl.Utf8, "norm": pl.Utf8, "feat": pl.Utf8, "pca": pl.Utf8,
+COLUMNS = {"dataset": pl.Utf8, "filt": pl.Utf8, "norm": pl.Utf8, "feat": pl.Utf8, "pca": pl.Utf8,
            "pca_params": pl.Utf8, "is_reference": pl.Boolean, "metric": pl.Utf8,
            "index": pl.Int64, "value": pl.Float64}
-# a parameterless node may carry no param field (`STAGE.module`): read it as "default"
-SEGMENT = re.compile(r"^([A-Z][A-Z0-9_]*)\.([A-Za-z0-9_]+)(?:\.([A-Za-z0-9_]+))?$")
-
-
-def lineage(path):
-    """Stage -> (module, params) from an ob output path, in path order."""
-    out = {}
-    for part in Path(path).parts:
-        m = SEGMENT.match(part)
-        if m:
-            out[m.group(1)] = (m.group(2), m.group(3) or "default")
-    return out
-
-
-def prefix(path, stage):
-    """The path up to and including the `stage` segment: one input matrix."""
-    parts = Path(path).parts
-    for i, part in enumerate(parts):
-        if part.startswith(stage + "."):
-            return str(Path(*parts[: i + 1]))
-    return None
 
 
 def read_matrix(path):
@@ -122,20 +102,6 @@ def compare(ref_emb, ref_load, emb, load, ks):
     return rows
 
 
-def pair_members(embeddings, loadings, stage):
-    """{embedding path: loadings path} for members that ran `stage`."""
-    by_dir = {str(Path(p).parent): p for p in loadings}
-    out = {}
-    for e in embeddings:
-        if stage not in lineage(e):
-            continue
-        lo = by_dir.get(str(Path(e).parent))
-        if lo is None:
-            raise ValueError(f"no loadings_tsv next to {e}")
-        out[e] = lo
-    return out
-
-
 def read_tenx(h5):
     """TENx genes x cells CSC matrix as scipy CSR (one row per gene)."""
     with h5py.File(h5, "r") as f:
@@ -156,18 +122,25 @@ def total_variance(x):
     return float(((s2 - s1 * s1 / n) / (n - 1)).sum())
 
 
-def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", matrix=None,
-        labels=None):
-    """`labels`: member embedding path -> extra columns (its lineage's parameter
-    values, from cli.member_parameters), placed after pca_params."""
-    members = pair_members(embeddings, loadings, stage)
+def anchor_key(member, anchor):
+    """The node the member hangs off at `anchor` (one input matrix), from its lineage."""
+    e = fanin.lineage_entry(member, anchor)
+    return e["node_id"] if e else None
+
+
+def run(members, reference_module, ks, stage="PCA", anchor="FEAT", matrix=None):
+    """`members`: gather-record members carrying embedding_tsv and loadings_tsv
+    (fanin.manifest_members). Each `stage` member is compared with the
+    `reference_module` member under the same `anchor` node."""
+    members = sorted((m for m in members if m["lineage"][-1]["stage"] == stage),
+                     key=lambda m: m["files"]["embedding_tsv"])
     refs = {}
-    for e in members:
-        if lineage(e)[stage][0] == reference_module:
-            key = prefix(e, anchor)
+    for m in members:
+        if m["lineage"][-1]["module"] == reference_module:
+            key = anchor_key(m, anchor)
             if key in refs:
                 raise ValueError(f"two {reference_module} members under {key}")
-            refs[key] = e
+            refs[key] = m
     if not members:  # group without PCA (e.g. only RDIMR embeddings): nothing to compare
         print(f"no {stage} members in this group; writing an empty table")
         return pl.DataFrame(schema=COLUMNS)
@@ -178,31 +151,27 @@ def run(embeddings, loadings, reference_module, ks, stage="PCA", anchor="FEAT", 
     total = total_variance(matrix) if matrix else None
 
     rows = []
-    for e, lo in sorted(members.items()):
-        key = prefix(e, anchor)
+    for m in members:
+        e, lo = m["files"]["embedding_tsv"], m["files"]["loadings_tsv"]
+        key = anchor_key(m, anchor)
         if key not in refs:
             print(f"WARN no {reference_module} under {key}; skipping {e}")
             continue
         r = refs[key]
-        cells, ref_emb = read_matrix(r)
-        genes, ref_load = read_matrix(members[r])
+        cells, ref_emb = read_matrix(r["files"]["embedding_tsv"])
+        genes, ref_load = read_matrix(r["files"]["loadings_tsv"])
         emb = align(*read_matrix(e), cells)
         load = align(*read_matrix(lo), genes)
-        lin = lineage(e)
-        meta = {s: f"{m}.{h}" for s, (m, h) in lin.items()}
+        lin = fanin.member_lineage_cols(m, "pca")
+        lin.pop("pca_stage")  # always PCA here
         extra = []
         if total is not None:
             extra = [("var_explained", i + 1, float(v / total))
                      for i, v in enumerate(emb.var(axis=0, ddof=1))]
         for metric, idx, value in compare(ref_emb, ref_load, emb, load, ks) + extra:
             rows.append({
-                "dataset": lin.get("DATA", ("", ""))[0],
-                "norm": meta.get("NORM", ""),
-                "feat": meta.get("FEAT", ""),
-                "pca": lin[stage][0],
-                "pca_params": lin[stage][1],
-                **(labels or {}).get(e, {}),
-                "is_reference": e == r,
+                **lin,
+                "is_reference": m is r,
                 "metric": metric,
                 "index": idx,
                 "value": value,
@@ -249,11 +218,8 @@ def parse_args():
 def main():
     args = parse_args()
     ks = [int(k) for k in args.ks.split(",")]
-    embeddings = cli.from_files(args.from_files, "embedding_tsv")
-    loadings = cli.from_files(args.from_files, "loadings_tsv")
-    labels = cli.member_parameters(args.from_files)
-    df = run(embeddings, loadings, args.reference_module, ks,
-             matrix=args.normalized_selected_h5, labels=labels)
+    members = fanin.manifest_members(args.from_files, "embedding_tsv", "loadings_tsv")
+    df = run(members, args.reference_module, ks, matrix=args.normalized_selected_h5)
     out = cli.output_path(args, "pca_metrics_tsv", "_pca_metrics.tsv")
     out.parent.mkdir(parents=True, exist_ok=True)
     df.write_csv(out, separator="\t")

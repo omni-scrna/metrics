@@ -12,7 +12,8 @@ from pathlib import Path
 
 import polars as pl
 
-sys.path.insert(0, str(Path(__file__).parent / "../src"))  # shipped `common`
+sys.path.insert(0, str(Path(__file__).parent / "../src"))  # shipped `common`, fanin
+import fanin  # noqa: E402
 from common import cli  # noqa: E402
 
 
@@ -29,7 +30,7 @@ def main():
     p.add_argument("--from-files", dest="from_files", required=True,
                    help="ob gather record (lineage.json v2): every member's pca_metrics_tsv")
     args = p.parse_args()
-    files = cli.from_files(args.from_files, "pca_metrics_tsv")
+    files = fanin.member_files(args.from_files, "pca_metrics_tsv")
     if not files:
         sys.exit(f"no pca_metrics_tsv in {args.from_files}")
     df = concat(files)
