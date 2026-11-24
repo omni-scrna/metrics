@@ -154,3 +154,32 @@ def test_results_row_bind_keeps_every_column(tmp_path):
     assert df["pca_params"].to_list() == ["12345678", "abcdef12"]
     assert df["pca_solver"].to_list() == [None, "full"]
     assert df["value"].to_list() == ["0.5", "1e-13"]  # text passes through untouched
+
+
+def test_procrustes_rel_err():
+    from pca_metrics import procrustes_rel_err
+    rng = np.random.default_rng(1)
+    z = rng.normal(size=(200, 5))
+    q, _ = np.linalg.qr(rng.normal(size=(5, 5)))
+    assert procrustes_rel_err(z, z @ q.T) < 1e-12  # any rotation/reflection is free
+    assert abs(procrustes_rel_err(z, 2 * z) - 1.0) < 1e-12  # scale is not: ||Z - 2Z|| / ||Z||
+    # brute force: no random orthogonal Q beats the closed form
+    zh = z + 0.3 * rng.normal(size=z.shape)
+    best = procrustes_rel_err(z, zh)
+    for _ in range(200):
+        r, _ = np.linalg.qr(rng.normal(size=(5, 5)))
+        assert np.linalg.norm(z - zh @ r) / np.linalg.norm(z) >= best - 1e-12
+
+
+def test_pc_sin_vw_weights_by_reference_variance():
+    from pca_metrics import compare
+    rng = np.random.default_rng(2)
+    load = np.linalg.qr(rng.normal(size=(30, 3)))[0]
+    emb = rng.normal(size=(500, 3)) * [10.0, 3.0, 1.0]
+    rows = {(m, i): v for m, i, v in compare(emb, load, emb, load, [3])}
+    assert rows[("pc_sin_vw", 3)] < 1e-12  # identical arm
+    tilted = load.copy()
+    tilted[:, 2] = np.linalg.qr(np.c_[load, rng.normal(size=30)])[0][:, 3]  # PC3 orthogonal
+    rows = {(m, i): v for m, i, v in compare(emb, load, emb, tilted, [3])}
+    var = emb.var(axis=0, ddof=1)
+    assert abs(rows[("pc_sin_vw", 3)] - var[2] / var.sum()) < 1e-12  # only PC3's share counts

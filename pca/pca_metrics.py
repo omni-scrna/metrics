@@ -17,6 +17,14 @@ same as EMBED_M's, so the two tables join.
   pc_sin         per PC   sin(angle) between loading vectors i (sign-free)
   subspace_sin   per k    largest principal-angle sine, loadings[:, :k]
   scores_sin     per k    same on the cell scores (cells aligned by id)
+  pc_sin_vw      per k    sum_i var_ref_i * pc_sin_i / sum_i var_ref_i over PCs 1..k:
+                          the per-PC angle weighted by the reference variance it
+                          carries. Inherits pc_sin's swaps inside near-degenerate pairs.
+  procrustes_rel_err per k  min over orthogonal Q of ||Z - Z_hat Q||_F / ||Z||_F,
+                          Z = reference scores[:, :k] (pracma::procrustes d / norm(Z, "F")).
+                          Unlike the sines it sees scale: an arm whose PCs are
+                          right but whose variances are not (standardised genes,
+                          float32 eigenvalues) shows up here.
   ipr            per PC   inverse participation ratio of the member's OWN loading
                           vector, sum l^4 / (sum l^2)^2; 1/IPR = effective number
                           of genes. lambda_i * l_g^2 is gene g's share of
@@ -80,6 +88,13 @@ def max_sin(a, b):
     return float(np.linalg.norm(qb - qa @ (qa.T @ qb), ord=2))
 
 
+def procrustes_rel_err(z, z_hat):
+    """pracma::procrustes(Z, Z_hat)$d / norm(Z, "F"): Q = U V^T from the SVD of
+    Z_hat^T Z is the orthogonal Q minimising ||Z - Z_hat Q||_F, and d is that minimum."""
+    u, _, vt = np.linalg.svd(z_hat.T @ z)
+    return float(np.linalg.norm(z - z_hat @ (u @ vt)) / np.linalg.norm(z))
+
+
 def ipr(load):
     """Per-column inverse participation ratio; scale-free (no unit norm needed)."""
     return (load ** 4).sum(axis=0) / (load ** 2).sum(axis=0) ** 2
@@ -92,13 +107,16 @@ def compare(ref_emb, ref_load, emb, load, ks):
     rows += [("ipr", i + 1, float(v)) for i, v in enumerate(ipr(load))]
     var_ref = ref_emb[:, :k].var(axis=0, ddof=1)
     var = emb[:, :k].var(axis=0, ddof=1)
+    sins = np.array([max_sin(ref_load[:, [i]], load[:, [i]]) for i in range(k)])
     for i in range(k):
         rows.append(("eig_rel_err", i + 1, abs(var[i] - var_ref[i]) / var_ref[i]))
-        rows.append(("pc_sin", i + 1, max_sin(ref_load[:, [i]], load[:, [i]])))
+        rows.append(("pc_sin", i + 1, float(sins[i])))
     for kk in ks:
         if kk <= k:
+            rows.append(("pc_sin_vw", kk, float(var_ref[:kk] @ sins[:kk] / var_ref[:kk].sum())))
             rows.append(("subspace_sin", kk, max_sin(ref_load[:, :kk], load[:, :kk])))
             rows.append(("scores_sin", kk, max_sin(ref_emb[:, :kk], emb[:, :kk])))
+            rows.append(("procrustes_rel_err", kk, procrustes_rel_err(ref_emb[:, :kk], emb[:, :kk])))
     return rows
 
 
