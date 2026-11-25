@@ -42,9 +42,6 @@ s <- m[, .(
   `max pc_sin, PC1-10` = max(value[metric == "pc_sin" & index <= 10]),
   `subspace_sin k=10` = value[metric == "subspace_sin" & index == 10][1],
   `subspace_sin k=50` = value[metric == "subspace_sin" & index == 50][1],
-  `pc_sin_vw k=50` = value[metric == "pc_sin_vw" & index == 50][1],
-  `procrustes k=10` = value[metric == "procrustes_rel_err" & index == 10][1],
-  `procrustes k=50` = value[metric == "procrustes_rel_err" & index == 50][1],
   `max eig_rel_err, PC1-10` = max(value[metric == "eig_rel_err" & index <= 10])
 ), by = .(dataset, basis, pca, pca_params, input)]
 setorder(s, dataset, basis, pca, input)
@@ -97,31 +94,13 @@ Largest principal-angle sine, leading k PCs: loadings and cell scores.
 ```{r}
 #| fig-height: 8
 #| fig-width: 11
-sub <- m[metric %in% c("subspace_sin", "scores_sin")]  # procrustes has its own plot: not a sine
+sub <- m[metric %in% c("subspace_sin", "scores_sin")]
 ggplot(sub, aes(index, shown, colour = pca, linetype = metric,
                 group = interaction(pca, pca_params, metric))) +
   geom_line() + geom_point(size = 0.8) +
   scale_y_log10() +
   facet_grid(NORM ~ FEAT) +
   labs(x = "k (leading PCs)", y = "max sin(principal angle)", colour = "PCA module") +
-  theme_bw()
-```
-
-## Score error after Procrustes rotation
-
-`procrustes_rel_err`: ||Z - Z_hat Q||_F / ||Z||_F on the leading k score
-columns, Q the best orthogonal rotation (`pracma::procrustes`). Rotation within
-the subspace is free, scale is not, so an arm that standardises genes or
-mis-sizes eigenvalues stays high even when its subspace sine is small.
-
-```{r}
-#| fig-height: 8
-#| fig-width: 11
-ggplot(m[metric == "procrustes_rel_err"], aes(index, shown, colour = pca, group = interaction(pca, pca_params))) +
-  geom_line() + geom_point(size = 0.8) +
-  scale_y_log10() +
-  facet_grid(NORM ~ FEAT) +
-  labs(x = "k (leading PCs)", y = "relative Frobenius error after rotation", colour = "PCA module") +
   theme_bw()
 ```
 
