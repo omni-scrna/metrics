@@ -90,23 +90,6 @@ ggplot(m[metric == "pc_sin" & basis == "PCA"], aes(index, shown, colour = pca, g
   theme_bw()
 ```
 
-## Variance-weighted loading error
-
-`pc_sin_vw`: the per-PC sines for PCs 1..k, each weighted by the reference
-variance of that PC. A large angle on a low-variance PC counts little; one on
-PC1 counts most. Like `pc_sin`, it is high when two near-equal PCs swap.
-
-```{r}
-#| fig-height: 8
-#| fig-width: 11
-ggplot(m[metric == "pc_sin_vw" & basis == "PCA"], aes(index, shown, colour = pca, group = interaction(pca, pca_params))) +
-  geom_line() + geom_point(size = 0.8) +
-  scale_y_log10() +
-  facet_grid(NORM ~ FEAT) +
-  labs(x = "k (leading PCs)", y = "variance-weighted sin(angle)", colour = "PCA module") +
-  theme_bw()
-```
-
 ## Leading-subspace error
 
 Largest principal-angle sine, leading k PCs: loadings and cell scores.
