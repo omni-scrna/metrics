@@ -198,25 +198,8 @@ def run(members, reference_module, ks, stage="PCA", anchor="FEAT", matrix=None):
 
 
 def frame(rows):
-    """Rows -> a typed table. Parameter columns differ between members (a module
-    without the parameter leaves it null); a column whose values mix types
-    becomes text, ints mixed with floats become floats."""
-    keys = list(dict.fromkeys(k for r in rows for k in r))
-    tail = ["is_reference", "metric", "index", "value"]
-    keys = [k for k in keys if k not in tail] + tail
-    cols = {}
-    for k in keys:
-        vals = [r.get(k) for r in rows]
-        if k in COLUMNS:
-            cols[k] = pl.Series(k, vals, dtype=COLUMNS[k])
-            continue
-        kinds = {type(v) for v in vals if v is not None}
-        if kinds == {int, float}:
-            vals = [None if v is None else float(v) for v in vals]
-        elif len(kinds) > 1:
-            vals = [None if v is None else str(v) for v in vals]
-        cols[k] = pl.Series(k, vals)
-    return pl.DataFrame(cols)
+    """Rows -> a typed table (fanin.frame), ending in is_reference, metric, index, value."""
+    return fanin.frame(rows, ["is_reference", "metric", "index", "value"], COLUMNS)
 
 
 def parse_args():

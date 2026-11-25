@@ -8,6 +8,8 @@ paths. Both write the same columns, so tables from R and Python gathers join.
 
 import json
 
+import polars as pl
+
 
 def manifest_members(path, *ids):
     """Members that carry every output id in `ids` (e.g. "embedding_tsv",
@@ -64,3 +66,26 @@ def member_lineage_cols(member, as_):
         for k, v in (e.get("parameters") or {}).items():
             cols[f"{e['stage'].lower()}_{k}"] = cell(v)
     return cols
+
+
+def frame(rows, tail, types):
+    """Rows (dicts: lineage columns + `tail`) -> a typed table, lineage columns
+    first, then `tail` in order. `types` fixes the dtype of named columns.
+    Parameter columns differ between members (a module without the parameter
+    leaves it null); a column whose values mix types becomes text, ints mixed
+    with floats become floats."""
+    keys = list(dict.fromkeys(k for r in rows for k in r))
+    keys = [k for k in keys if k not in tail] + list(tail)
+    cols = {}
+    for k in keys:
+        vals = [r.get(k) for r in rows]
+        if k in types:
+            cols[k] = pl.Series(k, vals, dtype=types[k])
+            continue
+        kinds = {type(v) for v in vals if v is not None}
+        if kinds == {int, float}:
+            vals = [None if v is None else float(v) for v in vals]
+        elif len(kinds) > 1:
+            vals = [None if v is None else str(v) for v in vals]
+        cols[k] = pl.Series(k, vals)
+    return pl.DataFrame(cols)
