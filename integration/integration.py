@@ -151,10 +151,8 @@ def main() -> None:
             pcr = float("nan")
         log(f"pcr={pcr} (n_batches={n_batches})")
 
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        out_path = args.output_dir / f"{args.name}_integration_metrics.json"
+        out_path = cli.output_path(args, "integration_metrics", "_integration_metrics.json")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w") as fh:
             json.dump(
                 {

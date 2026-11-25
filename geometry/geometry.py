@@ -623,20 +623,10 @@ def main() -> None:
         embedding_distances=embedding_distances,
         geodesic_distances=geodesic_distances,
     )
-    output_dir = Path(args.output_dir)
-    output_dir.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    output_path = (
-        output_dir
-        / f"{args.name}_geometry_metrics.json"
-    )
-    pairs_output_path = (
-        output_dir
-        / f"{args.name}_geometry_pair_summary.tsv"
-    )
+    output_path = cli.output_path(args, "geometry_metrics", "_geometry_metrics.json")
+    pairs_output_path = cli.output_path(args, "geometry_pair_summary", "_geometry_pair_summary.tsv")
+    for p in (output_path, pairs_output_path):
+        p.parent.mkdir(parents=True, exist_ok=True)
     sampled_pairs_table.write_csv(
         pairs_output_path,
         separator="\t",

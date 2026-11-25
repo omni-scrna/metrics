@@ -41,12 +41,15 @@ classification_metrics <- function(pred, truth) {
 }
 
 # arg parsing
-source("src/common/cli.R")
+# ob runs entrypoints from the output tree, not the module dir: resolve paths from this file
+here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+source(file.path(here, "../src/common/cli.R"))
+SCHEMA_DIR <- file.path(here, "../src/common/schema")
 p <- arg_parser("ANNO-M module")
 p <- add_base_args(p)                    # --output_dir, --name
 p <- add_stage_args(p, "ANNO_M")     # the stage I/O contract
 # your own method params — argparser directly (its add_argument requires `help`):
-args <- parse_args(p)                    # argparser's own parser
+args <- parse_args_outputs(p)            # takes out --output id=PATH, then argparser
 
 # logging
 cat(sprintf("Full command: %s\n", paste(commandArgs(trailingOnly = FALSE), collapse = " ")))
@@ -57,7 +60,6 @@ for (i in 1:length(args)) {
 cat(sprintf("----------------------------------\n"))
 
 
-dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
 pred <- fread(args$annotations_tsv, header = TRUE)
 truth <- fread(args$rawdata_clusters_truth, header = TRUE)
@@ -83,5 +85,6 @@ result <- c(
   list(n_cells = n_cells, n_labels = n_labels, n_dropped = n_dropped),
   scores
 )
-out <- file.path(args$output_dir, sprintf("%s_annotation_metrics.json", args$name))
+out <- output_path(args, "annotation_metrics", "_annotation_metrics.json")
+dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
 writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE, na = "null"), out)
