@@ -1,5 +1,5 @@
 {
-  "stage": "GEOM-M",
+  "stage": "GEOM_M",
   "version": "0.1.2",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [

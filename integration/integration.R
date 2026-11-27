@@ -31,10 +31,13 @@ suppressPackageStartupMessages({
 CMS_METRICS <- c("cms", "entropy", "isi")
 
 # arg parsing
-source("src/common/cli.R")
+# ob runs entrypoints from the output tree, not the module dir: resolve paths from this file
+here <- dirname(normalizePath(sub("^--file=", "", grep("^--file=", commandArgs(FALSE), value = TRUE))))
+source(file.path(here, "../src/common/cli.R"))
+SCHEMA_DIR <- file.path(here, "../src/common/schema")
 p <- arg_parser("INTG8-M module")
 p <- add_base_args(p)                    # --output_dir, --name
-p <- add_stage_args(p, "INTG8-M")        # the stage I/O contract
+p <- add_stage_args(p, "INTG8_M")        # the stage I/O contract
 # your own method params — argparser directly (its add_argument requires `help`):
 p <- add_argument(p, "--k", type = "integer", default = 20L,
   help = "Neighborhood size (knn) for CellMixS cms/entropy/isi")
@@ -46,7 +49,7 @@ p <- add_argument(p, "--ldf_k", type = "integer", default = 75L,
   help = "Neighborhood size (knn) for CellMixS ldfDiff")
 p <- add_argument(p, "--ldf_n_dim", type = "integer", default = 20L,
   help = "Requested pre/post dims for ldfDiff's LDF subspace (clamped to embedding widths)")
-args <- parse_args(p)                    # argparser's own parser
+args <- parse_args_outputs(p)            # takes out --output id=PATH, then argparser
 
 # logging
 cat(sprintf("Full command: %s\n", paste(commandArgs(trailingOnly = FALSE), collapse = " ")))
@@ -57,7 +60,6 @@ for (i in 1:length(args)) {
 cat(sprintf("----------------------------------\n"))
 
 
-dir.create(args$output_dir, showWarnings = FALSE, recursive = TRUE)
 
 corrected <- fread(args$corrected_tsv, header = TRUE)
 truth <- fread(args$rawdata_clusters_truth, header = TRUE)
@@ -163,5 +165,6 @@ result <- c(
   scores,
   list(ldf_diff_mean = ldf_diff_mean)
 )
-out <- file.path(args$output_dir, sprintf("%s_integration_metrics.json", args$name))
+out <- output_path(args, "integration_metrics", "_integration_metrics.json")
+dir.create(dirname(out), showWarnings = FALSE, recursive = TRUE)
 writeLines(toJSON(result, auto_unbox = TRUE, pretty = TRUE, na = "null"), out)

@@ -1,5 +1,5 @@
 {
-  "stage": "NORM-M",
+  "stage": "NORM_M",
   "version": "0.1.1",
   "benchmark": "omni-scrna/split-stages-plan",
   "args": [

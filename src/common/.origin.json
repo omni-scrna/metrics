@@ -1,27 +1,27 @@
 {
   "common": {
     "repo": "https://github.com/omni-scrna/boilerplate",
-    "ref": "main",
-    "commit": "8a8ba8524939b49db1179b2da5687f99cceeb91b",
+    "ref": "api-0.8.0",
+    "commit": "d8d6e46fdf7ffd80f1752feae6d4ef6c31519fa8",
     "lang": "r"
   },
   "schemas": [
     {
       "benchmark": "split-stages",
       "repo": "https://github.com/omni-scrna/split-stages-plan",
-      "ref": "refactor-geometry-agreement-spec",
-      "commit": "4ed2aec2c538acd45f572a4bffd255a50e1afb73",
+      "ref": "api-0.8.0",
+      "commit": "323c6ea9ccd82c30bb4f3d950b65921bb08598ea",
       "files": [
-        "ANNO-M",
-        "CLUST-M",
-        "EMBED-M",
-        "GEOM-M",
-        "GRAPH-M",
-        "INTG8-M",
-        "NORM-M",
+        "ANNO_M",
+        "CLUST_M",
+        "EMBED_M",
+        "GEOM_M",
+        "GRAPH_M",
+        "INTG8_M",
+        "NORM_M",
         "_base"
       ]
     }
   ],
-  "fetched_at": "2026-09-23T14:46:02Z"
+  "fetched_at": "2026-11-25T01:04:15Z"
 }

@@ -44,7 +44,7 @@ def parse_args():
     # hand-rolled below, so the whole CLI stays visible here.
     p = argparse.ArgumentParser(description="INTG8-M module (scib-metrics-backed)")
     cli.add_base_args(p)              # --output_dir, --name
-    cli.add_stage_args(p, "INTG8-M")  # --corrected_tsv, --rawdata_clusters_truth, --rawdata_h5ad, --properties_info, --embedding_tsv, --clusters_corrected_tsv
+    cli.add_stage_args(p, "INTG8_M")  # --corrected_tsv, --rawdata_clusters_truth, --rawdata_h5ad, --properties_info, --embedding_tsv, --clusters_corrected_tsv
     p.add_argument("--n_neighbors", type=int, default=90,
                    help="Neighborhood size (knn) for the graph clisi_knn is computed over")
     p.add_argument("--random_state", type=int, default=0,
@@ -151,10 +151,8 @@ def main() -> None:
             pcr = float("nan")
         log(f"pcr={pcr} (n_batches={n_batches})")
 
-        output_dir = Path(args.output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
-
-        out_path = args.output_dir / f"{args.name}_integration_metrics.json"
+        out_path = cli.output_path(args, "integration_metrics", "_integration_metrics.json")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         with open(out_path, "w") as fh:
             json.dump(
                 {
